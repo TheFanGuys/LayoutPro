@@ -121,12 +121,14 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 
 #printArea{display:none;}
 @media print{
+  @page{ size: landscape; margin: 0.35in; }
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
-  #printArea{display:block; position:absolute; left:0; top:0; width:100%; color:#000; font-family:-apple-system,sans-serif; padding:16px;}
-  #printArea img{max-width:100%; border:1px solid #ccc;}
-  #printArea h2{margin:0 0 2px;} #printArea .meta{color:#555; font-size:12px; margin-bottom:12px;}
-  #printArea table{width:100%; border-collapse:collapse; margin-top:12px; font-size:11px; table-layout:fixed; word-wrap:break-word;}
+  #printArea{display:block; position:absolute; left:0; top:0; width:100%; color:#000; font-family:-apple-system,sans-serif;}
+  #printArea img.sheet{width:100%; display:block; page-break-after:always;}
+  #printArea .afterpage{padding:8px 4px;}
+  #printArea h3{margin:0 0 6px;}
+  #printArea table{width:100%; border-collapse:collapse; margin-top:8px; font-size:11px; table-layout:fixed; word-wrap:break-word;}
   #printArea td,#printArea th{border:1px solid #ccc; padding:5px 6px; text-align:left; vertical-align:top;}
 }
 </style>
@@ -154,10 +156,11 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 <div id="ctx"><div id="ctxInner"></div></div>
 
 <div id="dock">
-  <button class="tool active" data-tool="pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Move/Edit</button>
+  <button class="tool active" data-tool="pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Move</button>
   <button class="tool" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
   <button class="tool" data-tool="wall"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12"/></svg>Wall</button>
   <button class="tool" id="tPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-9 8.5"/></svg>Photo</button>
+  <button class="tool" id="tRotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v5h-5"/></svg>Rotate</button>
   <button class="tool" id="tFit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg>Fit</button>
 </div>
 
@@ -236,7 +239,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="mPdf">Export PDF / print</button></div>
   <div class="field"><button class="btn" id="mCsv">Export fan schedule (CSV)</button></div>
   <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
-  <div class="field"><button class="btn" id="mRotate">Rotate plan…</button></div>
+  <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
   <div class="field"><button class="btn" id="mPhoto" style="display:none">Adjust photo</button></div>
   <div class="field"><button class="btn" id="mBrands">Manage brands</button></div>
   <div class="field"><button class="btn" id="mRename">Rename this job</button></div>
@@ -251,7 +254,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20d · Rotate · Address · GPS · Racking</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20g · PDF sheet · Dimensions · Panels · ColumnGrid</p>
 </div>
 
 <!-- Add sheet -->
@@ -267,11 +270,31 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <button class="btn" id="addController">Master controller</button>
   </div>
   <div class="field" style="margin-top:10px;"><button class="btn" id="addKeypad">Keypad</button></div>
-  <div class="field"><button class="btn" id="addColumn">Column (structural)</button></div>
+  <div class="row">
+    <button class="btn" id="addPanel480">Panel 480V</button>
+    <button class="btn" id="addPanel208">Panel 120/208V</button>
+  </div>
+  <div class="field" style="margin-top:10px;"><button class="btn" id="addColumn">Column (structural)</button></div>
+  <div class="field"><button class="btn" id="addColGrid">Column grid (auto)…</button></div>
   <div class="field"><button class="btn" id="addRack">Warehouse racking</button></div>
   <div class="field"><button class="btn" id="addRoom">Room / area box</button></div>
   <div class="field" style="margin-top:6px;border-top:1px solid var(--line);padding-top:14px;"><button class="btn" id="addBuilding">Building from size (ft)…</button></div>
   <div class="field"><button class="btn" id="addAddress">Building from address…</button></div>
+</div>
+
+<!-- Column grid sheet -->
+<div class="scrim" id="cgridScrim"></div>
+<div class="sheet" id="cgridSheet">
+  <div class="grab"></div>
+  <h3>Column grid (auto)</h3>
+  <p class="hint">Count the structural columns each way and drop them as an even grid across the building. It spans the building outline (your drawn walls). Best on a straightened building — rotate it flat first if it came in diagonal. Drag any column after to fine-tune.</p>
+  <div class="row">
+    <div class="field"><label>Columns across</label><input class="inp" id="cgX" inputmode="numeric" placeholder="e.g. 8"></div>
+    <div class="field"><label>Columns deep</label><input class="inp" id="cgY" inputmode="numeric" placeholder="e.g. 5"></div>
+  </div>
+  <div class="field"><label>Inset from walls (ft)</label><input class="inp" id="cgInset" inputmode="decimal" placeholder="0"></div>
+  <button class="btn primary" id="cgPlace">Place columns</button>
+  <div class="hint" id="cgStatus" style="min-height:18px;margin-top:10px;color:var(--amber2);font-weight:700;"></div>
 </div>
 
 <!-- Building sheet -->
@@ -371,10 +394,17 @@ let editId=null;           // fan currently in edit sheet
 let sel=null;              // {kind:'fan'|'room'|'wall', id}
 let bgMode=false;
 let showChains=true;
+let showDims=true;
 let wireType="fa";
 let bldUnit="ft";
 let wireFrom=null;   // {kind:'fan'|'device', id}
-const DEV={fap:{code:"FAP",color:"#DC2626"},controller:{code:"CTRL",color:"#0EA5A4"},keypad:{code:"KP",color:"#7C3AED"}};
+const DEV={
+  fap:{code:"FAP",color:"#DC2626"},
+  controller:{code:"CTRL",color:"#0EA5A4"},
+  keypad:{code:"KP",color:"#7C3AED"},
+  panel480:{code:"480V",color:"#E0791B",stripes:["#6B3F1D","#E0791B","#E3C200"]},
+  panel208:{code:"208V",color:"#2563EB",stripes:["#1A1A1A","#D32F2F","#2563EB"]}
+};
 const WIRE={fa:{color:"#F43F5E",label:"FA wire",dash:[]},comm:{color:"#34D399",label:"Comm wire",dash:[9,5]}};
 let saveTimer=null;
 let undoStack=[], redoStack=[];
@@ -552,7 +582,7 @@ function drawScene(c, tx, fanR, dpr, live){
 
   if(live && !bgImg){
     const step=40*u;
-    if(step>10){c.strokeStyle="rgba(255,255,255,.045)";c.lineWidth=1;
+    if(step>10){c.strokeStyle="rgba(255,255,255,.08)";c.lineWidth=1;
       const ox=(tx.x*dpr)%step,oy=(tx.y*dpr)%step;
       for(let x=ox;x<W;x+=step){c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke();}
       for(let y=oy;y<H;y+=step){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}}
@@ -619,6 +649,19 @@ function drawScene(c, tx, fanR, dpr, live){
     const seld=live&&sel&&sel.kind==="wall"&&sel.id===w.id;
     c.strokeStyle=seld?"#FF7A1A":"#d4dcea"; c.lineWidth=(seld?5:3.2)*dpr;
     c.beginPath();c.moveTo(a,b);c.lineTo(d,e);c.stroke();}
+  // wall dimensions (feet)
+  if(showDims){
+    c.textAlign="center";c.textBaseline="middle";c.font=`700 ${11*dpr}px -apple-system,sans-serif`;
+    for(const w of S.walls){const[a,b]=P(w.x1,w.y1),[d,e]=P(w.x2,w.y2);
+      const px=Math.hypot(d-a,e-b); if(px<46*dpr)continue;
+      const ft=Math.round(Math.hypot(w.x2-w.x1,w.y2-w.y1));
+      let nx=-(e-b)/px, ny=(d-a)/px; const off=11*dpr;
+      const mx=(a+d)/2+nx*off, my=(b+e)/2+ny*off;
+      const txt=ft+"′"; const tw=c.measureText(txt).width;
+      c.fillStyle="rgba(10,13,18,.82)"; roundRect(c,mx-tw/2-5*dpr,my-9*dpr,tw+10*dpr,18*dpr,5*dpr); c.fill();
+      c.fillStyle="#9fe0c0"; c.fillText(txt,mx,my+0.5*dpr);
+    }
+  }
   // columns (structural)
   for(const p of S.columns){const[x,y]=P(p.x,p.y); const s=7*dpr; const seld=live&&sel&&sel.kind==="column"&&sel.id===p.id;
     c.fillStyle="#cfd8e6"; c.strokeStyle="#0E1117"; c.lineWidth=2*dpr;
@@ -654,22 +697,38 @@ function drawScene(c, tx, fanR, dpr, live){
       c.fillStyle="#9fe3ff"; c.fillText(t,lx,ly-fanR-11.5*dpr);
     });
   }
-  // devices (FAP / controller / keypad)
+  // devices (FAP / controller / keypad / panels)
   for(const d of S.devices){
     const[x,y]=P(d.x,d.y); const meta=DEV[d.type]||DEV.fap; const sh=DEV_SH*dpr;
     const seld=live&&sel&&sel.kind==="device"&&sel.id===d.id;
     const wfrom=live&&wireFrom&&wireFrom.kind==="device"&&wireFrom.id===d.id;
-    c.save(); c.shadowColor="rgba(0,0,0,.4)";c.shadowBlur=6*dpr;c.shadowOffsetY=2*dpr;
-    c.fillStyle=meta.color; roundRect(c,x-sh,y-sh,sh*2,sh*2,5*dpr); c.fill();
-    c.shadowColor="transparent";c.shadowBlur=0;c.shadowOffsetY=0;
-    c.lineWidth=1.5*dpr;c.strokeStyle="rgba(255,255,255,.5)"; roundRect(c,x-sh,y-sh,sh*2,sh*2,5*dpr); c.stroke();
-    c.fillStyle="#fff";c.font=`800 ${11*dpr}px -apple-system,sans-serif`;c.textAlign="center";c.textBaseline="middle";
-    c.shadowColor="rgba(0,0,0,.5)";c.shadowBlur=2*dpr;
-    c.fillText(meta.code,x,y+0.5*dpr); c.shadowColor="transparent";c.shadowBlur=0; c.restore();
+    const hw=meta.stripes?sh*1.15:sh, hh=sh;
+    if(meta.stripes){
+      const x0=x-hw,y0=y-hh,w=hw*2,h=hh*2;
+      c.save();c.shadowColor="rgba(0,0,0,.4)";c.shadowBlur=6*dpr;c.shadowOffsetY=2*dpr;
+      roundRect(c,x0,y0,w,h,5*dpr);c.fillStyle="#0E1117";c.fill();
+      c.shadowColor="transparent";c.shadowBlur=0;c.shadowOffsetY=0;
+      c.save();roundRect(c,x0,y0,w,h,5*dpr);c.clip();
+      for(let i=0;i<3;i++){c.fillStyle=meta.stripes[i];c.fillRect(x0+i*w/3,y0,w/3+1,h);}
+      c.restore();
+      c.lineWidth=1.5*dpr;c.strokeStyle="rgba(255,255,255,.55)";roundRect(c,x0,y0,w,h,5*dpr);c.stroke();
+      c.font=`800 ${10*dpr}px -apple-system,sans-serif`;c.textAlign="center";c.textBaseline="middle";
+      const tw=c.measureText(meta.code).width;
+      c.fillStyle="rgba(8,10,14,.82)";roundRect(c,x-tw/2-4*dpr,y-7*dpr,tw+8*dpr,14*dpr,4*dpr);c.fill();
+      c.fillStyle="#fff";c.fillText(meta.code,x,y+0.5*dpr);c.restore();
+    } else {
+      c.save();c.shadowColor="rgba(0,0,0,.4)";c.shadowBlur=6*dpr;c.shadowOffsetY=2*dpr;
+      c.fillStyle=meta.color;roundRect(c,x-sh,y-sh,sh*2,sh*2,5*dpr);c.fill();
+      c.shadowColor="transparent";c.shadowBlur=0;c.shadowOffsetY=0;
+      c.lineWidth=1.5*dpr;c.strokeStyle="rgba(255,255,255,.5)";roundRect(c,x-sh,y-sh,sh*2,sh*2,5*dpr);c.stroke();
+      c.fillStyle="#fff";c.font=`800 ${11*dpr}px -apple-system,sans-serif`;c.textAlign="center";c.textBaseline="middle";
+      c.shadowColor="rgba(0,0,0,.5)";c.shadowBlur=2*dpr;
+      c.fillText(meta.code,x,y+0.5*dpr);c.shadowColor="transparent";c.shadowBlur=0;c.restore();
+    }
     if(d.label&&d.label!==meta.code){c.fillStyle="#C9D2E0";c.font=`600 ${10*dpr}px -apple-system`;c.textAlign="center";c.textBaseline="top";
-      c.fillText(d.label,x,y+sh+3*dpr);}
-    if(wfrom){c.strokeStyle="#FF7A1A";c.lineWidth=2.5*dpr;roundRect(c,x-sh-6*dpr,y-sh-6*dpr,(sh+6*dpr)*2,(sh+6*dpr)*2,7*dpr);c.stroke();}
-    else if(seld){c.strokeStyle="#FF7A1A";c.lineWidth=2.5*dpr;roundRect(c,x-sh-5*dpr,y-sh-5*dpr,(sh+5*dpr)*2,(sh+5*dpr)*2,7*dpr);c.stroke();}
+      c.fillText(d.label,x,y+hh+3*dpr);}
+    if(wfrom){c.strokeStyle="#FF7A1A";c.lineWidth=2.5*dpr;roundRect(c,x-hw-6*dpr,y-hh-6*dpr,(hw+6*dpr)*2,(hh+6*dpr)*2,7*dpr);c.stroke();}
+    else if(seld){c.strokeStyle="#FF7A1A";c.lineWidth=2.5*dpr;roundRect(c,x-hw-5*dpr,y-hh-5*dpr,(hw+5*dpr)*2,(hh+5*dpr)*2,7*dpr);c.stroke();}
   }
   // relocate arrows + ghost ring
   for(const f of S.fans){
@@ -876,7 +935,7 @@ function handleTap(sx,sy){
     }
     return;
   }
-  if(tool==="fap"||tool==="controller"||tool==="keypad"){pushHistory();
+  if(tool==="fap"||tool==="controller"||tool==="keypad"||tool==="panel480"||tool==="panel208"){pushHistory();
     S.devices.push({id:uid(),type:tool,x:w[0],y:w[1],label:DEV[tool].code});render();updateScope();return;}
   if(tool==="wire"){
     const n=hitNode(sx,sy);
@@ -925,7 +984,7 @@ function refreshCtx(){
   if(tool==="fan"){renderBrandBar();ctxEl.classList.add("show");return;}
   if(tool==="wire"){renderWireBar();ctxEl.classList.add("show");return;}
   if(tool==="wall"){renderWallBar();ctxEl.classList.add("show");return;}
-  if(["column","room","rack","fap","controller","keypad"].includes(tool)){renderHintBar();ctxEl.classList.add("show");return;}
+  if(["column","room","rack","fap","controller","keypad","panel480","panel208"].includes(tool)){renderHintBar();ctxEl.classList.add("show");return;}
   if(tool==="pan"&&sel){renderSelBar();ctxEl.classList.add("show");return;}
   ctxEl.classList.remove("show");
 }
@@ -945,7 +1004,8 @@ function renderBrandBar(){
 function renderHintBar(){
   ctxInner.innerHTML="";
   const labels={column:"Tap to drop columns",room:"Tap two corners for a room",rack:"Tap two corners to fill with racking",
-    fap:"Tap to place the fire-alarm panel",controller:"Tap to place the master controller",keypad:"Tap to place a keypad"};
+    fap:"Tap to place the fire-alarm panel",controller:"Tap to place the master controller",keypad:"Tap to place a keypad",
+    panel480:"Tap to place a 480V panel",panel208:"Tap to place a 120/208V panel"};
   hintSpan(labels[tool]||"");
   mkBtn("Done","primary",()=>setTool("pan"));
 }
@@ -1012,7 +1072,7 @@ document.querySelectorAll(".tool[data-tool]").forEach(b=>b.addEventListener("cli
 function setTool(t){tool=t;pending=null;wireFrom=null;hideBanner();if(t!=="pan")sel=null;
   document.querySelectorAll(".tool").forEach(x=>x.classList.remove("active"));
   let el=document.querySelector(`.tool[data-tool="${t}"]`);
-  if(!el && ["fan","column","room","rack","fap","controller","keypad","wire"].includes(t)) el=document.getElementById("addBtn");
+  if(!el && ["fan","column","room","rack","fap","controller","keypad","panel480","panel208","wire"].includes(t)) el=document.getElementById("addBtn");
   if(el)el.classList.add("active");
   refreshCtx();render();}
 document.getElementById("addBtn").addEventListener("click",()=>openSheet("add"));
@@ -1082,7 +1142,7 @@ function rotatePlan(deg){
   render();
 }
 function openRotate(){rotSession=0;rotLast=0;document.getElementById("rotSlider").value=0;pushHistory();document.getElementById("rotpanel").classList.add("show");}
-document.getElementById("mRotate").addEventListener("click",()=>{closeSheet("menu");openRotate();});
+document.getElementById("tRotate").addEventListener("click",()=>openRotate());
 document.getElementById("rotSlider").addEventListener("input",e=>{const v=parseFloat(e.target.value);rotatePlan(v-rotLast);rotSession+=(v-rotLast);rotLast=v;});
 document.getElementById("rotL90").addEventListener("click",()=>{rotatePlan(-90);rotSession-=90;});
 document.getElementById("rotR90").addEventListener("click",()=>{rotatePlan(90);rotSession+=90;});
@@ -1141,6 +1201,9 @@ document.getElementById("addWire").addEventListener("click",()=>{closeSheet("add
 document.getElementById("addFap").addEventListener("click",()=>{closeSheet("add");setTool("fap");});
 document.getElementById("addController").addEventListener("click",()=>{closeSheet("add");setTool("controller");});
 document.getElementById("addKeypad").addEventListener("click",()=>{closeSheet("add");setTool("keypad");});
+document.getElementById("addPanel480").addEventListener("click",()=>{closeSheet("add");setTool("panel480");});
+document.getElementById("addPanel208").addEventListener("click",()=>{closeSheet("add");setTool("panel208");});
+document.getElementById("addColGrid").addEventListener("click",()=>{closeSheet("add");document.getElementById("cgStatus").textContent="";openSheet("cgrid");});
 document.getElementById("addColumn").addEventListener("click",()=>{closeSheet("add");setTool("column");});
 document.getElementById("addRack").addEventListener("click",()=>{closeSheet("add");setTool("rack");});
 document.getElementById("addRoom").addEventListener("click",()=>{closeSheet("add");setTool("room");});
@@ -1232,7 +1295,7 @@ function buildSeg(id,opts,cur,cb){const el=document.getElementById(id);el.innerH
 /* ---------- sheets ---------- */
 function openSheet(n){document.getElementById(n+"Scrim").classList.add("show");document.getElementById(n+"Sheet").classList.add("show");}
 function closeSheet(n){document.getElementById(n+"Scrim").classList.remove("show");document.getElementById(n+"Sheet").classList.remove("show");}
-["fan","jobs","menu","brand","add","building","addr","rack"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
+["fan","jobs","menu","brand","add","building","addr","cgrid","rack"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
 function showBanner(t){const b=document.getElementById("banner");b.textContent=t;b.style.display="block";}
 function hideBanner(){document.getElementById("banner").style.display="none";}
 
@@ -1291,6 +1354,33 @@ document.getElementById("bgRotate").addEventListener("click",()=>{if(S.bg){S.bg.
 document.getElementById("bgDone").addEventListener("click",exitBgMode);
 
 /* ---------- fit ---------- */
+document.getElementById("cgPlace").addEventListener("click",generateColumnGrid);
+function wallBounds(){
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity,has=false;
+  S.walls.forEach(w=>{has=true;minx=Math.min(minx,w.x1,w.x2);miny=Math.min(miny,w.y1,w.y2);maxx=Math.max(maxx,w.x1,w.x2);maxy=Math.max(maxy,w.y1,w.y2);});
+  return has?{minx,miny,maxx,maxy}:contentBounds();
+}
+function generateColumnGrid(){
+  const nx=parseInt(document.getElementById("cgX").value,10), ny=parseInt(document.getElementById("cgY").value,10);
+  const inset=Math.max(0,parseFloat(document.getElementById("cgInset").value)||0);
+  const st=t=>document.getElementById("cgStatus").textContent=t;
+  if(!nx||!ny||nx<1||ny<1){st("Enter how many columns across and deep (whole numbers).");return;}
+  if(nx*ny>600){st("That's "+(nx*ny)+" columns — double-check the counts.");return;}
+  const b=wallBounds();
+  if(!b){st("Draw the building first (Building from size/address), then place the grid.");return;}
+  const x0=b.minx+inset, y0=b.miny+inset, W=(b.maxx-b.minx)-inset*2, H=(b.maxy-b.miny)-inset*2;
+  if(W<=0||H<=0){st("Inset is bigger than the building. Lower it.");return;}
+  pushHistory();
+  for(let i=0;i<nx;i++){
+    const fx=nx===1?0.5:i/(nx-1);
+    for(let j=0;j<ny;j++){
+      const fy=ny===1?0.5:j/(ny-1);
+      S.columns.push({id:uid(),x:x0+fx*W,y:y0+fy*H});
+    }
+  }
+  render();updateScope();
+  closeSheet("cgrid");fitAll();
+}
 function contentBounds(){
   let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity,has=false;
   const add=(x,y)=>{has=true;minx=Math.min(minx,x);miny=Math.min(miny,y);maxx=Math.max(maxx,x);maxy=Math.max(maxy,y);};
@@ -1363,6 +1453,8 @@ document.getElementById("mPdf").addEventListener("click",()=>{closeSheet("menu")
 document.getElementById("mCsv").addEventListener("click",()=>{closeSheet("menu");exportCSV();});
 document.getElementById("mChains").addEventListener("click",()=>{showChains=!showChains;
   document.getElementById("mChains").textContent=showChains?"Hide chain links":"Show chain links";render();});
+document.getElementById("mDims").addEventListener("click",()=>{showDims=!showDims;
+  document.getElementById("mDims").textContent=showDims?"Hide dimensions":"Show dimensions";render();});
 document.getElementById("mBrands").addEventListener("click",()=>{closeSheet("menu");renderBrands();openSheet("brand");});
 document.getElementById("mPhoto").addEventListener("click",()=>{closeSheet("menu");enterBgMode();});
 document.getElementById("mBackup").addEventListener("click",()=>{closeSheet("menu");backupAll();});
@@ -1419,6 +1511,8 @@ function legendItems(){
   if(S.devices.some(d=>d.type==="fap"))items.push({type:"dev",color:DEV.fap.color,label:"Fire-alarm panel"});
   if(S.devices.some(d=>d.type==="controller"))items.push({type:"dev",color:DEV.controller.color,label:"Master controller"});
   if(S.devices.some(d=>d.type==="keypad"))items.push({type:"dev",color:DEV.keypad.color,label:"Keypad"});
+  if(S.devices.some(d=>d.type==="panel480"))items.push({type:"panel",stripes:DEV.panel480.stripes,label:"480V panel"});
+  if(S.devices.some(d=>d.type==="panel208"))items.push({type:"panel",stripes:DEV.panel208.stripes,label:"120/208V panel"});
   if(S.racking.length)items.push({type:"rack",label:"Racking"});
   if(S.columns.length)items.push({type:"column",label:"Column"});
   return items;
@@ -1443,6 +1537,7 @@ function drawLegend(c,x0,y0,maxW,f,measureOnly){
       else if(it.type==="rack"){c.fillStyle="rgba(125,160,205,.5)";c.fillRect(cx-sw/2,cy-sw/2.6,sw,sw/1.3);c.strokeStyle="rgba(200,218,245,.85)";c.lineWidth=1*f;for(let k=1;k<3;k++){const yy=cy-sw/2.6+(sw/1.3)*k/3;c.beginPath();c.moveTo(cx-sw/2,yy);c.lineTo(cx+sw/2,yy);c.stroke();}}
       else if(it.type==="wire"){c.strokeStyle=it.color;c.lineWidth=2.6*f;if(it.dash&&it.dash.length)c.setLineDash(it.dash.map(v=>v*f));c.beginPath();c.moveTo(x,cy);c.lineTo(x+sw,cy);c.stroke();c.setLineDash([]);}
       else if(it.type==="dev"){c.fillStyle=it.color;roundRect(c,cx-sw/2,cy-sw/2.2,sw,sw/1.1,3*f);c.fill();}
+      else if(it.type==="panel"){c.save();roundRect(c,cx-sw/2,cy-sw/2.2,sw,sw/1.1,3*f);c.clip();for(let k=0;k<3;k++){c.fillStyle=it.stripes[k];c.fillRect(cx-sw/2+k*sw/3,cy-sw/2.2,sw/3+1,sw/1.1);}c.restore();c.strokeStyle="rgba(255,255,255,.55)";c.lineWidth=1*f;roundRect(c,cx-sw/2,cy-sw/2.2,sw,sw/1.1,3*f);c.stroke();}
       else if(it.type==="column"){c.fillStyle="#cfd8e6";c.fillRect(cx-sw/2.6,cy-sw/2.6,sw/1.3,sw/1.3);c.strokeStyle="#5b6678";c.lineWidth=1*f;c.beginPath();c.moveTo(cx-sw/2.6,cy-sw/2.6);c.lineTo(cx+sw/2.6,cy+sw/2.6);c.moveTo(cx+sw/2.6,cy-sw/2.6);c.lineTo(cx-sw/2.6,cy+sw/2.6);c.stroke();}
       c.fillStyle="#C9D2E0";c.textAlign="left";c.fillText(it.label,x+sw+gap,cy);
     }
@@ -1486,24 +1581,73 @@ async function sharePNG(){
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
   },"image/png");
 }
-function exportPDF(){
-  const url=makePlanCanvas().toDataURL("image/png");
+function makeSheet(){
+  const W=1600,H=1236;
+  const oc=document.createElement("canvas");oc.width=W;oc.height=H;const c=oc.getContext("2d");
+  c.fillStyle="#fff";c.fillRect(0,0,W,H);
   const {fa,st,byB}=totals();
-  let brandRows="";Object.keys(byB).forEach(i=>{brandRows+=`<tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${brandColor(i)};vertical-align:middle;margin-right:5px;"></span>${escapeHtml(S.brands[i]?S.brands[i].name:"?")}</td><td>${byB[i]}</td></tr>`;});
+  const titleH=64;
+  c.fillStyle="#11151D";c.fillRect(0,0,W,titleH);
+  c.fillStyle="#FF7A1A";c.fillRect(0,0,6,titleH);
+  c.textBaseline="middle";c.textAlign="left";
+  c.fillStyle="#fff";c.font="800 24px -apple-system,sans-serif";c.fillText(S.job||"Fan Layout",20,titleH*0.40);
+  c.fillStyle="#9aa6b8";c.font="13px -apple-system,sans-serif";
+  c.fillText(new Date().toLocaleDateString()+"    ·    "+S.fans.length+" fans    ·    "+(fa.Needs+fa.Maybe)+" need FA    ·    "+st.Relocate+" relocate",20,titleH*0.74);
+  c.textAlign="right";c.fillStyle="#46506280";c.font="800 14px -apple-system,sans-serif";c.fillText("FAN GUYS",W-18,titleH*0.5);
+  // index panel
+  const iw=336, iy=titleH, ih=H-titleH;
+  c.save();c.beginPath();c.rect(0,iy,iw,ih);c.clip();
+  c.fillStyle="#0E1117";c.fillRect(0,iy,iw,ih);
+  c.fillStyle="#FF7A1A";c.fillRect(0,iy,4,ih);
+  const Lx=24; let y=iy+30;
+  const head=t=>{y+=4;c.textAlign="left";c.textBaseline="alphabetic";c.fillStyle="#FF9A4D";c.font="800 12px -apple-system,sans-serif";c.fillText(t.toUpperCase(),Lx,y);y+=7;c.strokeStyle="rgba(255,255,255,.13)";c.lineWidth=1;c.beginPath();c.moveTo(Lx,y);c.lineTo(iw-22,y);c.stroke();y+=21;};
+  const row=(k,v,col)=>{c.textBaseline="alphabetic";c.font="600 14px -apple-system,sans-serif";c.textAlign="left";c.fillStyle="#C9D2E0";c.fillText(k,Lx,y);c.textAlign="right";c.fillStyle=col||"#fff";c.font="800 14px -apple-system,sans-serif";c.fillText(String(v),iw-22,y);y+=25;};
+  const swRow=(color,k,v)=>{c.fillStyle=color;c.beginPath();c.arc(Lx+6,y-5,6,0,7);c.fill();c.textBaseline="alphabetic";c.fillStyle="#C9D2E0";c.font="600 14px -apple-system,sans-serif";c.textAlign="left";c.fillText(k,Lx+20,y);c.textAlign="right";c.fillStyle="#fff";c.font="800 14px -apple-system,sans-serif";c.fillText(String(v),iw-22,y);y+=25;};
+  head("Fans"); row("Total fans",S.fans.length);
+  Object.keys(byB).forEach(i=>swRow(brandColor(i),(S.brands[i]?S.brands[i].name:"?"),byB[i]));
+  head("Fire alarm");
+  row("Has FA",fa.Has,"#36D17F"); row("Needs FA",fa.Needs,"#FF6B6B"); row("Maybe FA",fa.Maybe,"#F5B82E");
+  head("Status");
+  row("Existing",st.Existing); if(st.Relocate)row("Relocate",st.Relocate,"#FF7A1A"); if(st.New)row("New",st.New,"#36D17F"); if(st.Remove)row("Remove",st.Remove,"#FF6B6B");
+  const faW=S.links.filter(l=>l.type==="fa").length, coW=S.links.filter(l=>l.type==="comm").length;
+  const p480=S.devices.filter(d=>d.type==="panel480").length, p208=S.devices.filter(d=>d.type==="panel208").length;
+  const fapN=S.devices.filter(d=>d.type==="fap").length, ctl=S.devices.filter(d=>d.type==="controller").length, kp=S.devices.filter(d=>d.type==="keypad").length;
+  if(faW||coW||p480||p208||fapN||ctl||kp){head("Wiring & devices");
+    if(faW)row("FA wire runs",faW,"#F87186"); if(coW)row("Comm runs",coW,"#34D399");
+    if(p480)row("480V panels",p480,"#E0791B"); if(p208)row("120/208V panels",p208,"#5B8CF5");
+    if(fapN)row("Fire-alarm panels",fapN); if(ctl)row("Master controllers",ctl); if(kp)row("Keypads",kp);
+  }
+  if(S.columns.length||S.racking.length){head("Structure");
+    if(S.columns.length)row("Columns",S.columns.length);
+    if(S.racking.length)row("Racking blocks",S.racking.length);
+    const wb=wallBounds(); if(wb)row("Building (ft)",Math.round(wb.maxx-wb.minx)+" × "+Math.round(wb.maxy-wb.miny));
+  }
+  head("Key"); c.font="600 12px -apple-system,sans-serif";c.fillStyle="#9aa6b8";c.textAlign="left";
+  ["Green ring = Has FA","Red ring = Needs FA","Amber ring = Maybe FA","Arrow = relocate","Dashed = daisy chain","Stripes = panel phases"].forEach(t=>{c.fillText(t,Lx,y);y+=19;});
+  c.restore();
+  // plan area
+  const px=iw+16, py=titleH+16, pw=W-iw-32, ph=H-titleH-32;
+  c.fillStyle="#0E1117";c.fillRect(px,py,pw,ph);
+  const plan=makePlanCanvas();
+  const scale=Math.min(pw/plan.width, ph/plan.height);
+  const dw=plan.width*scale, dh=plan.height*scale;
+  c.drawImage(plan, px+(pw-dw)/2, py+(ph-dh)/2, dw, dh);
+  c.strokeStyle="#cdd5e2";c.lineWidth=1;c.strokeRect(px+0.5,py+0.5,pw,ph);
+  return oc;
+}
+function exportPDF(){
+  const sheetUrl=makeSheet().toDataURL("image/png");
   let sched="";sortFans().forEach(f=>{const chain=(f.chain||"")+(f.chainPos?(" · #"+f.chainPos):"");
     sched+=`<tr><td>${escapeHtml(f.label||"")}</td><td>${escapeHtml(S.brands[f.brand]?S.brands[f.brand].name:"?")}</td><td>${escapeHtml(f.dia||"")}</td><td>${escapeHtml(f.volt||"")}</td><td>${escapeHtml(f.control||"")}</td><td>${escapeHtml(chain)}</td><td>${f.fa}</td><td>${f.status}</td><td>${escapeHtml(f.notes||"")}</td></tr>`;});
   document.getElementById("printArea").innerHTML=`
-    <h2>${escapeHtml(S.job)} — Fan Layout</h2>
-    <div class="meta">${new Date().toLocaleString()} &nbsp;·&nbsp; ${S.fans.length} fans &nbsp;·&nbsp; ${fa.Needs+fa.Maybe} need FA &nbsp;·&nbsp; ${st.Relocate} relocate</div>
-    <img src="${url}">
-    <table><tr><th>Brand</th><th>Count</th></tr>${brandRows}
-      <tr><th>Needs FA</th><th>${fa.Needs}</th></tr><tr><th>Maybe FA</th><th>${fa.Maybe}</th></tr><tr><th>Has FA</th><th>${fa.Has}</th></tr>
-      <tr><th>Relocate</th><th>${st.Relocate}</th></tr><tr><th>New</th><th>${st.New}</th></tr><tr><th>Remove</th><th>${st.Remove}</th></tr></table>
-    <h3 style="margin-top:18px;">Fan schedule</h3>
-    <table><tr><th>Tag</th><th>Brand</th><th>Size</th><th>Voltage</th><th>Control</th><th>Chain</th><th>FA</th><th>Status</th><th>Notes</th></tr>${sched}</table>
-    ${S.links.length?`<h3 style="margin-top:18px;">Connections</h3>
-    <table><tr><th>Wire</th><th>From</th><th>To</th></tr>${S.links.map(l=>`<tr><td>${WIRE[l.type]?WIRE[l.type].label:l.type}</td><td>${escapeHtml(nodeName(l.a))}</td><td>${escapeHtml(nodeName(l.b))}</td></tr>`).join("")}</table>`:""}`;
-  setTimeout(()=>window.print(),150);
+    <img class="sheet" src="${sheetUrl}">
+    <div class="afterpage">
+      <h3>Fan schedule</h3>
+      <table><tr><th>Tag</th><th>Brand</th><th>Size</th><th>Voltage</th><th>Control</th><th>Chain</th><th>FA</th><th>Status</th><th>Notes</th></tr>${sched}</table>
+      ${S.links.length?`<h3 style="margin-top:16px;">Connections</h3>
+      <table><tr><th>Wire</th><th>From</th><th>To</th></tr>${S.links.map(l=>`<tr><td>${WIRE[l.type]?WIRE[l.type].label:l.type}</td><td>${escapeHtml(nodeName(l.a))}</td><td>${escapeHtml(nodeName(l.b))}</td></tr>`).join("")}</table>`:""}
+    </div>`;
+  setTimeout(()=>window.print(),200);
 }
 function exportCSV(){
   const head=["Tag","Brand","Size","Voltage","Control","Chain","ChainPos","FA","Status","Notes"];
