@@ -255,7 +255,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20m · Touch fix · Wire safe-draw · Bay grid</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20n · Hi-res share · Touch fix · Bay grid</p>
 </div>
 
 <!-- Add sheet -->
@@ -1549,12 +1549,13 @@ function totals(){const fa={Has:0,Needs:0,Maybe:0},st={Existing:0,Relocate:0,New
   S.fans.forEach(f=>{fa[f.fa]++;st[f.status]++;byB[f.brand]=(byB[f.brand]||0)+1;});return{fa,st,byB};}
 function sortFans(){return [...S.fans].sort((a,b)=>{const na=parseFloat(a.label),nb=parseFloat(b.label);
   if(!isNaN(na)&&!isNaN(nb))return na-nb;return String(a.label||"").localeCompare(String(b.label||""));});}
-function makePlanCanvas(){
+function makePlanCanvas(maxW){
   const b=contentBounds()||{minx:0,miny:0,maxx:innerWidth,maxy:innerHeight};
   const pad=40,bw=(b.maxx-b.minx)+pad*2,bh=(b.maxy-b.miny)+pad*2;
-  const targetW=Math.min(2000,Math.max(1000,bw)),sc=targetW/bw;
+  let sc=Math.min(maxW||2000,Math.max(1000,bw))/bw;
+  const maxH=4200; if(bh*sc>maxH)sc*=maxH/(bh*sc);     // cap tall plans for memory
   const pc=document.createElement("canvas");pc.width=Math.round(bw*sc);pc.height=Math.round(bh*sc);
-  const fanR=Math.max(13,Math.min(34,pc.width/45));
+  const fanR=Math.max(13,Math.min(40,pc.width/55));
   const prevSel=sel;sel=null;
   drawScene(pc.getContext("2d"),{scale:sc,x:(-b.minx+pad),y:(-b.miny+pad)},fanR,1,false);
   sel=prevSel;return pc;
@@ -1634,7 +1635,7 @@ function makePNG(){
   return oc;
 }
 async function sharePNG(){
-  const oc=makeSheet();
+  const oc=makeSheet(2.5);
   oc.toBlob(async blob=>{
     const fname=(S.job.replace(/[^\w]+/g,"_")||"fan_layout")+".png";
     const file=new File([blob],fname,{type:"image/png"});
@@ -1644,9 +1645,11 @@ async function sharePNG(){
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
   },"image/png");
 }
-function makeSheet(){
+function makeSheet(dpi){
+  dpi=dpi||1;
   const W=1600,H=1236;
-  const oc=document.createElement("canvas");oc.width=W;oc.height=H;const c=oc.getContext("2d");
+  const oc=document.createElement("canvas");oc.width=Math.round(W*dpi);oc.height=Math.round(H*dpi);const c=oc.getContext("2d");
+  c.scale(dpi,dpi);
   c.fillStyle="#fff";c.fillRect(0,0,W,H);
   const {fa,st,byB}=totals();
   const titleH=64;
@@ -1691,7 +1694,7 @@ function makeSheet(){
   // plan area
   const px=iw+16, py=titleH+16, pw=W-iw-32, ph=H-titleH-32;
   c.fillStyle="#0E1117";c.fillRect(px,py,pw,ph);
-  const plan=makePlanCanvas();
+  const plan=makePlanCanvas(Math.round(2000*dpi));
   const fitN=Math.min(pw/plan.width, ph/plan.height);
   const fitR=Math.min(pw/plan.height, ph/plan.width);
   const cx=px+pw/2, cy=py+ph/2;
@@ -1707,7 +1710,7 @@ function makeSheet(){
   return oc;
 }
 function exportPDF(){
-  const sheetUrl=makeSheet().toDataURL("image/png");
+  const sheetUrl=makeSheet(2.5).toDataURL("image/png");
   let sched="";sortFans().forEach(f=>{const chain=(f.chain||"")+(f.chainPos?(" · #"+f.chainPos):"");
     sched+=`<tr><td>${escapeHtml(f.label||"")}</td><td>${escapeHtml(S.brands[f.brand]?S.brands[f.brand].name:"?")}</td><td>${escapeHtml(f.dia||"")}</td><td>${escapeHtml(f.volt||"")}</td><td>${escapeHtml(f.control||"")}</td><td>${escapeHtml(chain)}</td><td>${f.fa}</td><td>${f.status}</td><td>${escapeHtml(f.notes||"")}</td></tr>`;});
   document.getElementById("printArea").innerHTML=`
