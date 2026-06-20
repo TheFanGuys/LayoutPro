@@ -255,7 +255,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20k · Wire dodge · Sheet fit · Bay grid</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20m · Touch fix · Wire safe-draw · Bay grid</p>
 </div>
 
 <!-- Add sheet -->
@@ -573,13 +573,16 @@ function linkExists(a,b,type){return S.links.some(ln=>ln.type===type&&((sameNode
 function resize(){DPR=Math.min(window.devicePixelRatio||1,2.5);
   cv.width=Math.floor(innerWidth*DPR); cv.height=Math.floor(innerHeight*DPR); render();}
 addEventListener("resize",resize);
+addEventListener("orientationchange",()=>setTimeout(resize,250));
+if(window.visualViewport){window.visualViewport.addEventListener("resize",resize);}
 function brandColor(i){const b=S.brands[i];return b?b.color:"#888";}
 function render(){drawScene(ctx, view, FAN_R*DPR, DPR, true);}
 
 function modTau(x){const t=Math.PI*2;return((x%t)+t)%t;}
 function strokeWireAround(c,ax,ay,bx,by,obs){
+  try{
   const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy);
-  if(len<1||!obs.length){c.beginPath();c.moveTo(ax,ay);c.lineTo(bx,by);c.stroke();return;}
+  if(len<1||!obs||!obs.length){c.beginPath();c.moveTo(ax,ay);c.lineTo(bx,by);c.stroke();return;}
   const ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
   const hits=[];
   for(const o of obs){
@@ -604,6 +607,7 @@ function strokeWireAround(c,ax,ay,bx,by,obs){
     cursor=hit.exit;
   }
   c.lineTo(bx,by);c.stroke();
+  }catch(e){ c.beginPath();c.moveTo(ax,ay);c.lineTo(bx,by);c.stroke(); }
 }
 function drawScene(c, tx, fanR, dpr, live){
   const W=c.canvas.width,H=c.canvas.height;
@@ -868,7 +872,9 @@ function arrow(c,x1,y1,x2,y2,dpr,fanR){
 
 /* ---------- input ---------- */
 let g=null, pinch=null;
-function getXY(t){const r=cv.getBoundingClientRect();return [t.clientX-r.left,t.clientY-r.top];}
+function getXY(t){const r=cv.getBoundingClientRect();
+  const fx=r.width?innerWidth/r.width:1, fy=r.height?innerHeight/r.height:1;
+  return [(t.clientX-r.left)*fx,(t.clientY-r.top)*fy];}
 cv.addEventListener("touchstart",e=>{
   e.preventDefault();
   if(e.touches.length===2){startPinch(e);g=null;return;}
