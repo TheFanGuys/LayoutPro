@@ -255,7 +255,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20i · Wire routing · Bay grid · PDF sheet</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20j · Sheet fit · Wire routing · Bay grid</p>
 </div>
 
 <!-- Add sheet -->
@@ -1627,7 +1627,7 @@ function makePNG(){
   return oc;
 }
 async function sharePNG(){
-  const oc=makePNG();
+  const oc=makeSheet();
   oc.toBlob(async blob=>{
     const fname=(S.job.replace(/[^\w]+/g,"_")||"fan_layout")+".png";
     const file=new File([blob],fname,{type:"image/png"});
@@ -1685,9 +1685,17 @@ function makeSheet(){
   const px=iw+16, py=titleH+16, pw=W-iw-32, ph=H-titleH-32;
   c.fillStyle="#0E1117";c.fillRect(px,py,pw,ph);
   const plan=makePlanCanvas();
-  const scale=Math.min(pw/plan.width, ph/plan.height);
-  const dw=plan.width*scale, dh=plan.height*scale;
-  c.drawImage(plan, px+(pw-dw)/2, py+(ph-dh)/2, dw, dh);
+  const fitN=Math.min(pw/plan.width, ph/plan.height);
+  const fitR=Math.min(pw/plan.height, ph/plan.width);
+  const cx=px+pw/2, cy=py+ph/2;
+  if(fitR>fitN*1.03){
+    c.save();c.translate(cx,cy);c.rotate(Math.PI/2);
+    c.drawImage(plan,-plan.width*fitR/2,-plan.height*fitR/2,plan.width*fitR,plan.height*fitR);
+    c.restore();
+  } else {
+    const dw=plan.width*fitN, dh=plan.height*fitN;
+    c.drawImage(plan,cx-dw/2,cy-dh/2,dw,dh);
+  }
   c.strokeStyle="#cdd5e2";c.lineWidth=1;c.strokeRect(px+0.5,py+0.5,pw,ph);
   return oc;
 }
