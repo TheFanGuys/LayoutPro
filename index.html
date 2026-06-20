@@ -121,7 +121,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 
 #printArea{display:none;}
 @media print{
-  @page{ size: landscape; margin: 0.35in; }
+  @page{ size: portrait; margin: 0.35in; }
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
   #printArea{display:block; position:absolute; left:0; top:0; width:100%; color:#000; font-family:-apple-system,sans-serif;}
@@ -237,10 +237,12 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <h3>Menu</h3>
   <div class="field"><button class="btn primary" id="mShare">Share image</button></div>
   <div class="field"><button class="btn" id="mPdf">Export PDF / print</button></div>
+  <div class="field"><button class="btn" id="mSvg">Save zoomable vector (SVG)</button></div>
   <div class="field"><button class="btn" id="mCsv">Export fan schedule (CSV)</button></div>
   <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
   <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
   <div class="field"><button class="btn" id="mBayGrid">Hide column grid</button></div>
+  <div class="field"><button class="btn" id="mTidy">Remove stray items…</button></div>
   <div class="field"><button class="btn" id="mPhoto" style="display:none">Adjust photo</button></div>
   <div class="field"><button class="btn" id="mBrands">Manage brands</button></div>
   <div class="field"><button class="btn" id="mRename">Rename this job</button></div>
@@ -255,7 +257,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20o · Export framing · Hi-res · Touch fix</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20s · White SVG · Portrait fit · Tidy</p>
 </div>
 
 <!-- Add sheet -->
@@ -1512,12 +1514,85 @@ document.getElementById("mClear").addEventListener("click",()=>{closeSheet("menu
 document.getElementById("mShare").addEventListener("click",()=>{closeSheet("menu");sharePNG();});
 document.getElementById("mPdf").addEventListener("click",()=>{closeSheet("menu");exportPDF();});
 document.getElementById("mCsv").addEventListener("click",()=>{closeSheet("menu");exportCSV();});
+document.getElementById("mSvg").addEventListener("click",()=>{closeSheet("menu");exportSVG();});
+function exportSVG(){
+  const b=planBounds(); if(!b){uiAlert("Draw a plan first.");return;}
+  const pad=Math.max(20,(b.maxx-b.minx)*0.04);
+  const vx=b.minx-pad, vy=b.miny-pad, vw=(b.maxx-b.minx)+pad*2, vh=(b.maxy-b.miny)+pad*2;
+  const D=Math.hypot(vw,vh);
+  const R=Math.min(22,Math.max(7,D/70)), lw=Math.min(3,Math.max(0.5,D/520)), fs=R*0.8;
+  const C={bg:"#ffffff",wall:"#1f2733",grid:"#ccd6e6",roomStroke:"#5f79b3",roomFill:"#2f6bff",rackFill:"#7da0cd",rackStroke:"#7b93c2",dim:"#0f7a45",col:"#4a5363",chain:"#1f93cf",title:"#16202e"};
+  const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const n=v=>(Math.round(v*100)/100);
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${n(vx)} ${n(vy)} ${n(vw)} ${n(vh)}" font-family="Arial,Helvetica,sans-serif">`;
+  s+=`<rect x="${n(vx)}" y="${n(vy)}" width="${n(vw)}" height="${n(vh)}" fill="${C.bg}"/>`;
+  if(S.bayGrid&&showBayGrid){const g=S.bayGrid;
+    for(let i=0;i<g.nx;i++){const x1=g.px+i*g.ux,y1=g.py+i*g.uy;s+=`<line x1="${n(x1)}" y1="${n(y1)}" x2="${n(x1+(g.ny-1)*g.vx)}" y2="${n(y1+(g.ny-1)*g.vy)}" stroke="${C.grid}" stroke-width="${n(lw*0.5)}"/>`;}
+    for(let j=0;j<g.ny;j++){const x1=g.px+j*g.vx,y1=g.py+j*g.vy;s+=`<line x1="${n(x1)}" y1="${n(y1)}" x2="${n(x1+(g.nx-1)*g.ux)}" y2="${n(y1+(g.nx-1)*g.uy)}" stroke="${C.grid}" stroke-width="${n(lw*0.5)}"/>`;}
+  }
+  S.rooms.forEach(r=>{const cx=r.x+r.w/2,cy=r.y+r.h/2;s+=`<g transform="rotate(${n(r.rot||0)} ${n(cx)} ${n(cy)})"><rect x="${n(r.x)}" y="${n(r.y)}" width="${n(r.w)}" height="${n(r.h)}" fill="${C.roomFill}" fill-opacity="0.05" stroke="${C.roomStroke}" stroke-width="${n(lw)}"/>`;if(r.label)s+=`<text x="${n(r.x+4)}" y="${n(r.y+fs)}" fill="${C.title}" font-size="${n(fs*0.9)}">${esc(r.label)}</text>`;s+=`</g>`;});
+  S.racking.forEach(r=>{const cx=r.x+r.w/2,cy=r.y+r.h/2,depth=Math.max(2,r.depth||16),aisle=Math.max(2,r.aisle||12),period=depth+aisle,horiz=(r.dir||"h")==="h";
+    s+=`<g transform="rotate(${n(r.rot||0)} ${n(cx)} ${n(cy)})">`;let guard=0;
+    if(horiz){for(let yy=r.y;yy<r.y+r.h&&guard<300;yy+=period,guard++){const hh=Math.min(depth,r.y+r.h-yy);s+=`<rect x="${n(r.x)}" y="${n(yy)}" width="${n(r.w)}" height="${n(hh)}" fill="${C.rackFill}" fill-opacity="0.3" stroke="${C.rackStroke}" stroke-width="${n(lw*0.6)}"/>`;}}
+    else{for(let xx=r.x;xx<r.x+r.w&&guard<300;xx+=period,guard++){const ww=Math.min(depth,r.x+r.w-xx);s+=`<rect x="${n(xx)}" y="${n(r.y)}" width="${n(ww)}" height="${n(r.h)}" fill="${C.rackFill}" fill-opacity="0.3" stroke="${C.rackStroke}" stroke-width="${n(lw*0.6)}"/>`;}}
+    s+=`<rect x="${n(r.x)}" y="${n(r.y)}" width="${n(r.w)}" height="${n(r.h)}" fill="none" stroke="${C.roomStroke}" stroke-width="${n(lw)}"/></g>`;});
+  S.walls.forEach(w=>{s+=`<line x1="${n(w.x1)}" y1="${n(w.y1)}" x2="${n(w.x2)}" y2="${n(w.y2)}" stroke="${C.wall}" stroke-width="${n(lw*1.6)}" stroke-linecap="round"/>`;});
+  if(showDims)S.walls.forEach(w=>{const len=Math.hypot(w.x2-w.x1,w.y2-w.y1);if(len<R*2)return;const mx=(w.x1+w.x2)/2,my=(w.y1+w.y2)/2;s+=`<text x="${n(mx)}" y="${n(my)}" fill="${C.dim}" font-size="${n(fs*0.85)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${Math.round(len)}'</text>`;});
+  S.columns.forEach(p=>{s+=`<circle cx="${n(p.x)}" cy="${n(p.y)}" r="${n(Math.max(0.8,R*0.12))}" fill="${C.col}"/>`;});
+  S.links.forEach(ln=>{const a=nodeCenter(ln.a),bb=nodeCenter(ln.b);if(!a||!bb)return;const wr=WIRE[ln.type]||WIRE.fa;const dash=ln.type==="comm"?` stroke-dasharray="${n(R*0.5)} ${n(R*0.3)}"`:"";s+=`<line x1="${n(a[0])}" y1="${n(a[1])}" x2="${n(bb[0])}" y2="${n(bb[1])}" stroke="${wr.color}" stroke-width="${n(lw*1.2)}"${dash}/>`;});
+  if(showChains){const groups=chainGroups();Object.keys(groups).forEach(k=>{const arr=groups[k];if(arr.length<2)return;let d="";arr.forEach((f,i)=>{const px=(f.status==="Relocate"&&f.reloX!=null)?f.reloX:f.x,py=(f.status==="Relocate"&&f.reloY!=null)?f.reloY:f.y;d+=(i?"L":"M")+n(px)+" "+n(py)+" ";});s+=`<path d="${d}" fill="none" stroke="${C.chain}" stroke-width="${n(lw)}" stroke-dasharray="${n(R*0.4)} ${n(R*0.3)}"/>`;});}
+  S.fans.forEach(f=>{if(f.status==="Relocate"&&f.reloX!=null){s+=`<line x1="${n(f.x)}" y1="${n(f.y)}" x2="${n(f.reloX)}" y2="${n(f.reloY)}" stroke="#FF7A1A" stroke-width="${n(lw*1.2)}"/><circle cx="${n(f.reloX)}" cy="${n(f.reloY)}" r="${n(R)}" fill="none" stroke="${brandColor(f.brand)}" stroke-width="${n(lw)}" stroke-dasharray="${n(R*0.4)} ${n(R*0.3)}"/>`;}});
+  S.fans.forEach(f=>{const fc=FA_COLOR[f.fa]||"#888";
+    s+=`<circle cx="${n(f.x)}" cy="${n(f.y)}" r="${n(R)}" fill="${brandColor(f.brand)}" stroke="#0b0e13" stroke-width="${n(lw*0.8)}"/>`;
+    s+=`<circle cx="${n(f.x)}" cy="${n(f.y)}" r="${n(R+lw*1.4)}" fill="none" stroke="${fc}" stroke-width="${n(lw*1.6)}"/>`;
+    s+=`<text x="${n(f.x)}" y="${n(f.y)}" fill="#fff" font-size="${n(fs*0.62)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${esc(f.label)}</text>`;});
+  S.devices.forEach(d=>{const meta=DEV[d.type]||DEV.fap,w=R*1.7,h=R*1.4,x=d.x-w/2,y=d.y-h/2;
+    if(meta.stripes){for(let i=0;i<3;i++)s+=`<rect x="${n(x+i*w/3)}" y="${n(y)}" width="${n(w/3)}" height="${n(h)}" fill="${meta.stripes[i]}"/>`;s+=`<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="#16202e" stroke-width="${n(lw*0.6)}"/>`;}
+    else s+=`<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(R*0.2)}" fill="${meta.color}"/>`;
+    s+=`<text x="${n(d.x)}" y="${n(d.y)}" fill="#fff" font-size="${n(fs*0.5)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${esc(meta.code)}</text>`;});
+  s+=`<text x="${n(vx+pad*0.4)}" y="${n(vy+fs*1.6)}" fill="${C.title}" font-size="${n(fs*1.4)}" font-weight="bold">${esc(S.job||"Fan Layout")}</text>`;
+  s+=`</svg>`;
+  const blob=new Blob([s],{type:"image/svg+xml"});
+  const fname=(S.job.replace(/[^\w]+/g,"_")||"fan_layout")+".svg";
+  const file=new File([blob],fname,{type:"image/svg+xml"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:S.job}).catch(()=>{});return;}
+  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
 document.getElementById("mChains").addEventListener("click",()=>{showChains=!showChains;
   document.getElementById("mChains").textContent=showChains?"Hide chain links":"Show chain links";render();});
 document.getElementById("mDims").addEventListener("click",()=>{showDims=!showDims;
   document.getElementById("mDims").textContent=showDims?"Hide dimensions":"Show dimensions";render();});
 document.getElementById("mBayGrid").addEventListener("click",()=>{showBayGrid=!showBayGrid;
   document.getElementById("mBayGrid").textContent=showBayGrid?"Hide column grid":"Show column grid";render();});
+document.getElementById("mTidy").addEventListener("click",()=>{closeSheet("menu");removeStrays();});
+function removeStrays(){
+  const b=planBounds(); if(!b){uiAlert("Nothing to tidy yet.");return;}
+  const mx=(b.maxx-b.minx)*0.25+40, my=(b.maxy-b.miny)*0.25+40;
+  const lo={minx:b.minx-mx,miny:b.miny-my,maxx:b.maxx+mx,maxy:b.maxy+my};
+  const inside=(x,y)=>x>=lo.minx&&x<=lo.maxx&&y>=lo.miny&&y<=lo.maxy;
+  const out={fans:[],walls:[],columns:[],devices:[],racking:[],rooms:[]};
+  S.fans.forEach(f=>{if(!inside(f.x,f.y))out.fans.push(f.id);});
+  S.walls.forEach(w=>{if(!inside(w.x1,w.y1)&&!inside(w.x2,w.y2))out.walls.push(w.id);});
+  S.columns.forEach(p=>{if(!inside(p.x,p.y))out.columns.push(p.id);});
+  S.devices.forEach(d=>{if(!inside(d.x,d.y))out.devices.push(d.id);});
+  S.racking.forEach(r=>{if(!inside(r.x+r.w/2,r.y+r.h/2))out.racking.push(r.id);});
+  S.rooms.forEach(r=>{if(!inside(r.x+r.w/2,r.y+r.h/2))out.rooms.push(r.id);});
+  const n=out.fans.length+out.walls.length+out.columns.length+out.devices.length+out.racking.length+out.rooms.length;
+  if(!n){uiAlert("No stray items found — everything's inside the building area.");return;}
+  uiConfirm("Found "+n+" item(s) sitting far outside your building (likely stray taps). Remove them?",()=>{
+    pushHistory();
+    const gf=new Set(out.fans), gd=new Set(out.devices);
+    S.fans=S.fans.filter(f=>!gf.has(f.id));
+    S.walls=S.walls.filter(w=>!out.walls.includes(w.id));
+    S.columns=S.columns.filter(p=>!out.columns.includes(p.id));
+    S.devices=S.devices.filter(d=>!gd.has(d.id));
+    S.racking=S.racking.filter(r=>!out.racking.includes(r.id));
+    S.rooms=S.rooms.filter(r=>!out.rooms.includes(r.id));
+    S.links=S.links.filter(ln=>!((ln.a.kind==="fan"&&gf.has(ln.a.id))||(ln.b.kind==="fan"&&gf.has(ln.b.id))||(ln.a.kind==="device"&&gd.has(ln.a.id))||(ln.b.kind==="device"&&gd.has(ln.b.id))));
+    sel=null;render();updateScope();fitAll();
+    uiAlert("Removed "+n+" stray item(s).");
+  },"Remove");
+}
 document.getElementById("mBrands").addEventListener("click",()=>{closeSheet("menu");renderBrands();openSheet("brand");});
 document.getElementById("mPhoto").addEventListener("click",()=>{closeSheet("menu");enterBgMode();});
 document.getElementById("mBackup").addEventListener("click",()=>{closeSheet("menu");backupAll();});
@@ -1550,20 +1625,24 @@ function totals(){const fa={Has:0,Needs:0,Maybe:0},st={Existing:0,Relocate:0,New
 function sortFans(){return [...S.fans].sort((a,b)=>{const na=parseFloat(a.label),nb=parseFloat(b.label);
   if(!isNaN(na)&&!isNaN(nb))return na-nb;return String(a.label||"").localeCompare(String(b.label||""));});}
 function planBounds(){
-  const cb=contentBounds(); if(!cb)return null;
-  if(!S.walls.length)return cb;
-  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-  S.walls.forEach(w=>{minx=Math.min(minx,w.x1,w.x2);miny=Math.min(miny,w.y1,w.y2);maxx=Math.max(maxx,w.x1,w.x2);maxy=Math.max(maxy,w.y1,w.y2);});
-  const mx=(maxx-minx)*0.4||60, my=(maxy-miny)*0.4||60;
-  const lo={minx:minx-mx,miny:miny-my,maxx:maxx+mx,maxy:maxy+my};
-  const b={minx,miny,maxx,maxy};
-  const inc=(x,y)=>{if(x>=lo.minx&&x<=lo.maxx&&y>=lo.miny&&y<=lo.maxy){b.minx=Math.min(b.minx,x);b.miny=Math.min(b.miny,y);b.maxx=Math.max(b.maxx,x);b.maxy=Math.max(b.maxy,y);}};
-  S.fans.forEach(f=>{inc(f.x,f.y);if(f.reloX!=null)inc(f.reloX,f.reloY);});
-  S.devices.forEach(d=>inc(d.x,d.y));
-  S.columns.forEach(p=>inc(p.x,p.y));
-  S.racking.forEach(r=>{inc(r.x,r.y);inc(r.x+r.w,r.y+r.h);});
-  S.rooms.forEach(r=>{inc(r.x,r.y);inc(r.x+r.w,r.y+r.h);});
-  return b;
+  const pts=[];
+  S.walls.forEach(w=>{pts.push([w.x1,w.y1],[w.x2,w.y2]);});
+  S.fans.forEach(f=>{pts.push([f.x,f.y]);if(f.reloX!=null)pts.push([f.reloX,f.reloY]);});
+  S.columns.forEach(p=>pts.push([p.x,p.y]));
+  S.racking.forEach(r=>{pts.push([r.x,r.y],[r.x+r.w,r.y+r.h]);});
+  S.devices.forEach(d=>pts.push([d.x,d.y]));
+  S.rooms.forEach(r=>{pts.push([r.x,r.y],[r.x+r.w,r.y+r.h]);});
+  if(pts.length<3)return contentBounds();
+  const xs=pts.map(p=>p[0]).slice().sort((a,b)=>a-b);
+  const ys=pts.map(p=>p[1]).slice().sort((a,b)=>a-b);
+  const q=(arr,t)=>arr[Math.min(arr.length-1,Math.max(0,Math.round(t*(arr.length-1))))];
+  // core = 4th–96th percentile box (drops far outliers), then pad 50% and take real extent of inliers
+  const cMinx=q(xs,0.04),cMaxx=q(xs,0.96),cMiny=q(ys,0.04),cMaxy=q(ys,0.96);
+  const padX=(cMaxx-cMinx)*0.5||100, padY=(cMaxy-cMiny)*0.5||100;
+  const lo={minx:cMinx-padX,miny:cMiny-padY,maxx:cMaxx+padX,maxy:cMaxy+padY};
+  let bx0=Infinity,by0=Infinity,bx1=-Infinity,by1=-Infinity,has=false;
+  for(const p of pts){if(p[0]>=lo.minx&&p[0]<=lo.maxx&&p[1]>=lo.miny&&p[1]<=lo.maxy){has=true;bx0=Math.min(bx0,p[0]);by0=Math.min(by0,p[1]);bx1=Math.max(bx1,p[0]);by1=Math.max(by1,p[1]);}}
+  return has?{minx:bx0,miny:by0,maxx:bx1,maxy:by1}:contentBounds();
 }
 function makePlanCanvas(maxW){
   const b=planBounds()||{minx:0,miny:0,maxx:innerWidth,maxy:innerHeight};
@@ -1663,7 +1742,7 @@ async function sharePNG(){
 }
 function makeSheet(dpi){
   dpi=dpi||1;
-  const W=1600,H=1236;
+  const W=1240,H=1600;
   const oc=document.createElement("canvas");oc.width=Math.round(W*dpi);oc.height=Math.round(H*dpi);const c=oc.getContext("2d");
   c.scale(dpi,dpi);
   c.fillStyle="#fff";c.fillRect(0,0,W,H);
