@@ -255,7 +255,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20n · Hi-res share · Touch fix · Bay grid</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20o · Export framing · Hi-res · Touch fix</p>
 </div>
 
 <!-- Add sheet -->
@@ -1549,8 +1549,24 @@ function totals(){const fa={Has:0,Needs:0,Maybe:0},st={Existing:0,Relocate:0,New
   S.fans.forEach(f=>{fa[f.fa]++;st[f.status]++;byB[f.brand]=(byB[f.brand]||0)+1;});return{fa,st,byB};}
 function sortFans(){return [...S.fans].sort((a,b)=>{const na=parseFloat(a.label),nb=parseFloat(b.label);
   if(!isNaN(na)&&!isNaN(nb))return na-nb;return String(a.label||"").localeCompare(String(b.label||""));});}
+function planBounds(){
+  const cb=contentBounds(); if(!cb)return null;
+  if(!S.walls.length)return cb;
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+  S.walls.forEach(w=>{minx=Math.min(minx,w.x1,w.x2);miny=Math.min(miny,w.y1,w.y2);maxx=Math.max(maxx,w.x1,w.x2);maxy=Math.max(maxy,w.y1,w.y2);});
+  const mx=(maxx-minx)*0.4||60, my=(maxy-miny)*0.4||60;
+  const lo={minx:minx-mx,miny:miny-my,maxx:maxx+mx,maxy:maxy+my};
+  const b={minx,miny,maxx,maxy};
+  const inc=(x,y)=>{if(x>=lo.minx&&x<=lo.maxx&&y>=lo.miny&&y<=lo.maxy){b.minx=Math.min(b.minx,x);b.miny=Math.min(b.miny,y);b.maxx=Math.max(b.maxx,x);b.maxy=Math.max(b.maxy,y);}};
+  S.fans.forEach(f=>{inc(f.x,f.y);if(f.reloX!=null)inc(f.reloX,f.reloY);});
+  S.devices.forEach(d=>inc(d.x,d.y));
+  S.columns.forEach(p=>inc(p.x,p.y));
+  S.racking.forEach(r=>{inc(r.x,r.y);inc(r.x+r.w,r.y+r.h);});
+  S.rooms.forEach(r=>{inc(r.x,r.y);inc(r.x+r.w,r.y+r.h);});
+  return b;
+}
 function makePlanCanvas(maxW){
-  const b=contentBounds()||{minx:0,miny:0,maxx:innerWidth,maxy:innerHeight};
+  const b=planBounds()||{minx:0,miny:0,maxx:innerWidth,maxy:innerHeight};
   const pad=40,bw=(b.maxx-b.minx)+pad*2,bh=(b.maxy-b.miny)+pad*2;
   let sc=Math.min(maxW||2000,Math.max(1000,bw))/bw;
   const maxH=4200; if(bh*sc>maxH)sc*=maxH/(bh*sc);     // cap tall plans for memory
