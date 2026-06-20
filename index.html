@@ -66,6 +66,12 @@ canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; d
 #bgpanel .r{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
 #bgpanel label{font-size:12px; color:var(--muted); width:64px;}
 #bgpanel input[type=range]{flex:1;}
+#gpspanel{position:fixed; left:0; right:0; bottom:0; z-index:8; padding:14px 14px calc(env(safe-area-inset-bottom) + 14px); background:var(--panel); border-top:1px solid var(--line); display:none;}
+#gpspanel.show{display:block;}
+#gpsAccBox{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+#gpsAccDot{width:13px; height:13px; border-radius:50%; background:var(--muted); flex:0 0 auto;}
+#gpsAccText{font-weight:700; font-size:15px;}
+#gpsBrandRow{display:flex; gap:10px; overflow-x:auto; margin-bottom:12px;}
 
 .scrim{position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.55); display:none;} .scrim.show{display:block;}
 .sheet{position:fixed; left:0; right:0; bottom:0; z-index:21; transform:translateY(100%); transition:transform .22s ease;
@@ -163,6 +169,14 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <p class="hint" style="margin-top:10px;">Drag the photo to move it. Pinch zooms the whole plan.</p>
 </div>
 
+<div id="gpspanel">
+  <div id="gpsAccBox"><span id="gpsAccDot"></span><span id="gpsAccText">Getting GPS…</span><button class="iconbtn" id="gpsReset" style="margin-left:auto;">Reset origin</button></div>
+  <div id="gpsBrandRow"></div>
+  <button class="btn primary" id="gpsDrop" style="height:62px;font-size:18px;">⊕  Drop fan here</button>
+  <div style="margin-top:10px;"><button class="btn" id="gpsDone">Done</button></div>
+  <p class="hint" style="margin-top:10px;">Stand under a fan and tap Drop. Uses your phone GPS — best near open doors or outdoors; a metal roof weakens it, so watch the ± reading. The faint ring on each fan shows how far off it might be. For tight indoor work, a Google Maps satellite screenshot loaded as a Photo is more accurate.</p>
+</div>
+
 <!-- Fan edit sheet -->
 <div class="scrim" id="fanScrim"></div>
 <div class="sheet" id="fanSheet">
@@ -226,6 +240,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="grab"></div>
   <h3>Add to plan</h3>
   <div class="field"><button class="btn primary" id="addFan">Fan</button></div>
+  <div class="field"><button class="btn" id="addGps">Walk &amp; drop (GPS)…</button></div>
   <div class="field"><button class="btn" id="addWire">Wire — FA / comm…</button></div>
   <div class="row">
     <button class="btn" id="addFap">Fire-alarm panel</button>
@@ -626,6 +641,8 @@ function drawScene(c, tx, fanR, dpr, live){
   c.textAlign="center";c.textBaseline="middle";
   for(const f of S.fans){
     const[x,y]=P(f.x,f.y);
+    if(f.acc>2){const ar=f.acc*u; if(ar>fanR+3*dpr){c.strokeStyle="rgba(255,196,120,.5)";c.fillStyle="rgba(255,196,120,.07)";c.lineWidth=1.2*dpr;c.setLineDash([4*dpr,4*dpr]);
+      c.beginPath();c.arc(x,y,ar,0,7);c.fill();c.stroke();c.setLineDash([]);}}
     const removed=f.status==="Remove";
     c.save();
     if(removed)c.globalAlpha=0.45;
@@ -959,6 +976,52 @@ function setTool(t){tool=t;pending=null;wireFrom=null;hideBanner();if(t!=="pan")
   refreshCtx();render();}
 document.getElementById("addBtn").addEventListener("click",()=>openSheet("add"));
 document.getElementById("addFan").addEventListener("click",()=>{closeSheet("add");setTool("fan");});
+document.getElementById("addGps").addEventListener("click",()=>{closeSheet("add");startGPS();});
+/* ---------- GPS walk & drop ---------- */
+let gpsWatchId=null, gpsLast=null, gpsRef=null;
+function startGPS(){
+  setTool("pan");
+  renderGpsBrands();
+  document.getElementById("gpspanel").classList.add("show");
+  if(!navigator.geolocation){gpsSetReadout(null,"GPS not supported on this device");return;}
+  gpsSetReadout(null,"Getting GPS…");
+  try{
+    gpsWatchId=navigator.geolocation.watchPosition(
+      p=>{gpsLast={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy};gpsSetReadout(gpsLast.acc);},
+      e=>{gpsSetReadout(null, e.code===1?"Location blocked — allow it in Settings (and note GPS doesn't work in the in-app preview, only your published link).":"GPS unavailable right now.");},
+      {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+  }catch(err){gpsSetReadout(null,"Couldn't start GPS.");}
+}
+function stopGPS(){if(gpsWatchId!=null&&navigator.geolocation){navigator.geolocation.clearWatch(gpsWatchId);}gpsWatchId=null;
+  document.getElementById("gpspanel").classList.remove("show");}
+function gpsSetReadout(accM,msg){
+  const dot=document.getElementById("gpsAccDot"), txt=document.getElementById("gpsAccText");
+  if(accM==null){dot.style.background="var(--muted)";txt.textContent=msg||"…";return;}
+  const ft=accM*3.28084;
+  dot.style.background = ft<=15?"#22C55E" : ft<=40?"#F5B82E" : "#EF4444";
+  txt.textContent="GPS  ±"+Math.round(ft)+" ft"+(ft>40?"  (too rough indoors)":ft>15?"  (usable)":"  (good)");
+}
+function renderGpsBrands(){
+  const row=document.getElementById("gpsBrandRow");row.innerHTML="";
+  S.brands.forEach((b,i)=>{const d=document.createElement("div");d.className="cbrand"+(i===activeBrand?" on":"");
+    d.innerHTML=`<div class="sw" style="background:${b.color}"></div><small>${escapeHtml(b.name)}</small>`;
+    d.onclick=()=>{activeBrand=i;renderGpsBrands();};row.appendChild(d);});
+}
+function gpsDrop(){
+  if(!gpsLast){uiAlert("No GPS fix yet — wait for the ± reading to appear.");return;}
+  pushHistory();
+  let wx,wy;
+  if(!gpsRef){const cc=s2w(innerWidth/2,innerHeight/2);gpsRef={lat:gpsLast.lat,lng:gpsLast.lng,wx:cc[0],wy:cc[1]};wx=cc[0];wy=cc[1];}
+  else{const mLat=111320, mLng=111320*Math.cos(gpsRef.lat*Math.PI/180);
+    const dN=(gpsLast.lat-gpsRef.lat)*mLat, dE=(gpsLast.lng-gpsRef.lng)*mLng;
+    wx=gpsRef.wx + dE*3.28084; wy=gpsRef.wy - dN*3.28084;}
+  S.fans.push({id:uid(),x:wx,y:wy,brand:activeBrand,status:"Existing",fa:"Needs",dia:"",label:String(S.nextNum++),reloX:null,reloY:null,volt:"",control:"",chain:"",chainPos:"",notes:"",acc:gpsLast.acc*3.28084});
+  render();updateScope();
+  if(navigator.vibrate)try{navigator.vibrate(30);}catch(e){}
+}
+document.getElementById("gpsDrop").addEventListener("click",gpsDrop);
+document.getElementById("gpsDone").addEventListener("click",()=>{stopGPS();fitAll();});
+document.getElementById("gpsReset").addEventListener("click",()=>{gpsRef=null;uiAlert("Origin reset — the next drop starts a fresh map.");});
 document.getElementById("addWire").addEventListener("click",()=>{closeSheet("add");setTool("wire");});
 document.getElementById("addFap").addEventListener("click",()=>{closeSheet("add");setTool("fap");});
 document.getElementById("addController").addEventListener("click",()=>{closeSheet("add");setTool("controller");});
