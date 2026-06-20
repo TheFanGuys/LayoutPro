@@ -232,7 +232,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20b · Address · GPS · Racking · Wiring</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20c · Address · GPS · Racking · Wiring</p>
 </div>
 
 <!-- Add sheet -->
@@ -1054,25 +1054,36 @@ async function findBuildingByAddress(){
     if(!gj||!gj.length){setAddrStatus("Couldn't find that address. Check spelling, or try the street + city.");return;}
     const lat=parseFloat(gj[0].lat), lng=parseFloat(gj[0].lon);
     setAddrStatus("Found it — checking for a building outline…");
-    const oq="[out:json][timeout:25];(way(around:90,"+lat+","+lng+")[building];);out geom;";
+    const oq="[out:json][timeout:25];(way(around:150,"+lat+","+lng+")[building];);out geom;";
     const opRes=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",headers:{"Content-Type":"text/plain"},body:oq});
     const oj=await opRes.json();
     const ways=((oj&&oj.elements)||[]).filter(e=>e.type==="way"&&e.geometry&&e.geometry.length>=4);
     if(!ways.length){setAddrStatus("Found the address, but no building outline is mapped here. Load a Google Maps satellite screenshot as a Photo and trace it.");return;}
-    let pick=ways.find(w=>pointInPoly(lng,lat,w.geometry));
-    if(!pick)pick=ways.reduce((a,b)=>polyArea(b.geometry)>polyArea(a.geometry)?b:a);
-    drawOsmBuilding(pick.geometry,lat,lng);
+    let primary=ways.find(w=>pointInPoly(lng,lat,w.geometry));
+    if(!primary)primary=ways.reduce((a,b)=>polyArea(b.geometry)>polyArea(a.geometry)?b:a);
+    // flood-fill the connected complex: keep buildings whose footprints touch/are within ~13m
+    const margin=0.00012;
+    const bb=w=>{let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;for(const p of w.geometry){mnx=Math.min(mnx,p.lon);mxx=Math.max(mxx,p.lon);mny=Math.min(mny,p.lat);mxy=Math.max(mxy,p.lat);}return{mnx,mny,mxx,mxy};};
+    const near=(a,b)=>!(a.mnx-b.mxx>margin||b.mnx-a.mxx>margin||a.mny-b.mxy>margin||b.mny-a.mxy>margin);
+    const group=[primary], used=new Set([primary]);
+    let added=true; while(added){added=false;
+      for(const w of ways){if(used.has(w))continue;
+        if(group.some(g=>near(bb(g),bb(w)))){group.push(w);used.add(w);added=true;}}}
+    drawOsmBuildings(group,lat,lng);
+    setAddrStatus("");
     closeSheet("addr");
   }catch(e){setAddrStatus("Lookup failed — check your internet. (Online lookups don't work in the in-app preview, only your published site.)");}
 }
-function drawOsmBuilding(geom,refLat,refLng){
+function drawOsmBuildings(group,refLat,refLng){
   pushHistory();
   const cc=s2w(innerWidth/2,innerHeight/2);
   const mLat=111320, mLng=111320*Math.cos(refLat*Math.PI/180);
-  const pts=geom.map(g=>[cc[0]+(g.lon-refLng)*mLng*3.28084, cc[1]-(g.lat-refLat)*mLat*3.28084]);
-  for(let i=0;i<pts.length-1;i++){
-    if(pts[i][0]===pts[i+1][0]&&pts[i][1]===pts[i+1][1])continue;
-    S.walls.push({id:uid(),x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1]});
+  for(const w of group){
+    const pts=w.geometry.map(g=>[cc[0]+(g.lon-refLng)*mLng*3.28084, cc[1]-(g.lat-refLat)*mLat*3.28084]);
+    for(let i=0;i<pts.length-1;i++){
+      if(pts[i][0]===pts[i+1][0]&&pts[i][1]===pts[i+1][1])continue;
+      S.walls.push({id:uid(),x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1]});
+    }
   }
   setTool("pan");render();updateScope();fitAll();
 }
