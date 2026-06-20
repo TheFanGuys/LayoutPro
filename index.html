@@ -232,7 +232,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20 · GPS · Racking · Wiring</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20b · Address · GPS · Racking · Wiring</p>
 </div>
 
 <!-- Add sheet -->
@@ -252,6 +252,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="addRack">Warehouse racking</button></div>
   <div class="field"><button class="btn" id="addRoom">Room / area box</button></div>
   <div class="field" style="margin-top:6px;border-top:1px solid var(--line);padding-top:14px;"><button class="btn" id="addBuilding">Building from size (ft)…</button></div>
+  <div class="field"><button class="btn" id="addAddress">Building from address…</button></div>
 </div>
 
 <!-- Building sheet -->
@@ -267,6 +268,17 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   </div>
   <div class="hint" id="bldReadout" style="min-height:18px;color:var(--amber2);font-weight:700;"></div>
   <button class="btn primary" id="bldCreate">Draw building</button>
+</div>
+
+<!-- Address sheet -->
+<div class="scrim" id="addrScrim"></div>
+<div class="sheet" id="addrSheet">
+  <div class="grab"></div>
+  <h3>Building from address</h3>
+  <p class="hint">Pulls the building outline from OpenStreetMap (free map data — not Google). Works when the building is mapped; many warehouses are. It drops the outline to scale — drag the corner dots to fix anything. Needs internet, and only runs on your live site (not the preview).</p>
+  <div class="field"><label>Address</label><input class="inp" id="addrInput" placeholder="1234 Industrial Pkwy, City, ST" autocapitalize="words"></div>
+  <button class="btn primary" id="addrFind">Find building</button>
+  <div class="hint" id="addrStatus" style="min-height:18px;margin-top:12px;color:var(--amber2);font-weight:700;"></div>
 </div>
 
 <!-- Racking sheet -->
@@ -1023,6 +1035,47 @@ function gpsDrop(){
 document.getElementById("gpsDrop").addEventListener("click",gpsDrop);
 document.getElementById("gpsDone").addEventListener("click",()=>{stopGPS();fitAll();});
 document.getElementById("gpsReset").addEventListener("click",()=>{gpsRef=null;uiAlert("Origin reset — the next drop starts a fresh map.");});
+/* ---------- building from address (OpenStreetMap) ---------- */
+document.getElementById("addAddress").addEventListener("click",()=>{closeSheet("add");document.getElementById("addrStatus").textContent="";openSheet("addr");});
+document.getElementById("addrFind").addEventListener("click",findBuildingByAddress);
+function setAddrStatus(t){document.getElementById("addrStatus").textContent=t;}
+function pointInPoly(x,y,g){let inside=false;
+  for(let i=0,j=g.length-1;i<g.length;j=i++){const xi=g[i].lon,yi=g[i].lat,xj=g[j].lon,yj=g[j].lat;
+    if(((yi>y)!=(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;}
+  return inside;}
+function polyArea(g){let a=0;for(let i=0,j=g.length-1;i<g.length;j=i++){a+=(g[j].lon+g[i].lon)*(g[j].lat-g[i].lat);}return Math.abs(a);}
+async function findBuildingByAddress(){
+  const q=document.getElementById("addrInput").value.trim();
+  if(!q){setAddrStatus("Type an address first.");return;}
+  setAddrStatus("Looking up address…");
+  try{
+    const geoRes=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),{headers:{Accept:"application/json"}});
+    const gj=await geoRes.json();
+    if(!gj||!gj.length){setAddrStatus("Couldn't find that address. Check spelling, or try the street + city.");return;}
+    const lat=parseFloat(gj[0].lat), lng=parseFloat(gj[0].lon);
+    setAddrStatus("Found it — checking for a building outline…");
+    const oq="[out:json][timeout:25];(way(around:90,"+lat+","+lng+")[building];);out geom;";
+    const opRes=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",headers:{"Content-Type":"text/plain"},body:oq});
+    const oj=await opRes.json();
+    const ways=((oj&&oj.elements)||[]).filter(e=>e.type==="way"&&e.geometry&&e.geometry.length>=4);
+    if(!ways.length){setAddrStatus("Found the address, but no building outline is mapped here. Load a Google Maps satellite screenshot as a Photo and trace it.");return;}
+    let pick=ways.find(w=>pointInPoly(lng,lat,w.geometry));
+    if(!pick)pick=ways.reduce((a,b)=>polyArea(b.geometry)>polyArea(a.geometry)?b:a);
+    drawOsmBuilding(pick.geometry,lat,lng);
+    closeSheet("addr");
+  }catch(e){setAddrStatus("Lookup failed — check your internet. (Online lookups don't work in the in-app preview, only your published site.)");}
+}
+function drawOsmBuilding(geom,refLat,refLng){
+  pushHistory();
+  const cc=s2w(innerWidth/2,innerHeight/2);
+  const mLat=111320, mLng=111320*Math.cos(refLat*Math.PI/180);
+  const pts=geom.map(g=>[cc[0]+(g.lon-refLng)*mLng*3.28084, cc[1]-(g.lat-refLat)*mLat*3.28084]);
+  for(let i=0;i<pts.length-1;i++){
+    if(pts[i][0]===pts[i+1][0]&&pts[i][1]===pts[i+1][1])continue;
+    S.walls.push({id:uid(),x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1]});
+  }
+  setTool("pan");render();updateScope();fitAll();
+}
 document.getElementById("addWire").addEventListener("click",()=>{closeSheet("add");setTool("wire");});
 document.getElementById("addFap").addEventListener("click",()=>{closeSheet("add");setTool("fap");});
 document.getElementById("addController").addEventListener("click",()=>{closeSheet("add");setTool("controller");});
@@ -1118,7 +1171,7 @@ function buildSeg(id,opts,cur,cb){const el=document.getElementById(id);el.innerH
 /* ---------- sheets ---------- */
 function openSheet(n){document.getElementById(n+"Scrim").classList.add("show");document.getElementById(n+"Sheet").classList.add("show");}
 function closeSheet(n){document.getElementById(n+"Scrim").classList.remove("show");document.getElementById(n+"Sheet").classList.remove("show");}
-["fan","jobs","menu","brand","add","building","rack"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
+["fan","jobs","menu","brand","add","building","addr","rack"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
 function showBanner(t){const b=document.getElementById("banner");b.textContent=t;b.style.display="block";}
 function hideBanner(){document.getElementById("banner").style.display="none";}
 
