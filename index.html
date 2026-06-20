@@ -72,6 +72,11 @@ canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; d
 #gpsAccDot{width:13px; height:13px; border-radius:50%; background:var(--muted); flex:0 0 auto;}
 #gpsAccText{font-weight:700; font-size:15px;}
 #gpsBrandRow{display:flex; gap:10px; overflow-x:auto; margin-bottom:12px;}
+#rotpanel{position:fixed; left:0; right:0; bottom:0; z-index:8; padding:14px 14px calc(env(safe-area-inset-bottom) + 14px); background:var(--panel); border-top:1px solid var(--line); display:none;}
+#rotpanel.show{display:block;}
+#rotpanel .r{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
+#rotpanel label{font-size:12px; color:var(--muted); width:42px;}
+#rotpanel input[type=range]{flex:1;}
 
 .scrim{position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.55); display:none;} .scrim.show{display:block;}
 .sheet{position:fixed; left:0; right:0; bottom:0; z-index:21; transform:translateY(100%); transition:transform .22s ease;
@@ -177,6 +182,19 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <p class="hint" style="margin-top:10px;">Stand under a fan and tap Drop. Uses your phone GPS — best near open doors or outdoors; a metal roof weakens it, so watch the ± reading. The faint ring on each fan shows how far off it might be. For tight indoor work, a Google Maps satellite screenshot loaded as a Photo is more accurate.</p>
 </div>
 
+<div id="rotpanel">
+  <div class="r">
+    <button class="btn" id="rotL90">⟲ 90°</button>
+    <button class="btn" id="rotR90">90° ⟳</button>
+  </div>
+  <div class="r"><label>Fine</label><input type="range" id="rotSlider" min="-45" max="45" value="0"></div>
+  <div class="row">
+    <button class="btn" id="rotReset">Reset</button>
+    <button class="btn primary" id="rotDone">Done</button>
+  </div>
+  <p class="hint" style="margin-top:10px;">Rotates the whole plan around its center. Use the fine slider to line an imported building up straight, then tap Done.</p>
+</div>
+
 <!-- Fan edit sheet -->
 <div class="scrim" id="fanScrim"></div>
 <div class="sheet" id="fanSheet">
@@ -218,6 +236,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="mPdf">Export PDF / print</button></div>
   <div class="field"><button class="btn" id="mCsv">Export fan schedule (CSV)</button></div>
   <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
+  <div class="field"><button class="btn" id="mRotate">Rotate plan…</button></div>
   <div class="field"><button class="btn" id="mPhoto" style="display:none">Adjust photo</button></div>
   <div class="field"><button class="btn" id="mBrands">Manage brands</button></div>
   <div class="field"><button class="btn" id="mRename">Rename this job</button></div>
@@ -232,7 +251,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20c · Address · GPS · Racking · Wiring</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20d · Rotate · Address · GPS · Racking</p>
 </div>
 
 <!-- Add sheet -->
@@ -276,7 +295,12 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="grab"></div>
   <h3>Building from address</h3>
   <p class="hint">Pulls the building outline from OpenStreetMap (free map data — not Google). Works when the building is mapped; many warehouses are. It drops the outline to scale — drag the corner dots to fix anything. Needs internet, and only runs on your live site (not the preview).</p>
-  <div class="field"><label>Address</label><input class="inp" id="addrInput" placeholder="1234 Industrial Pkwy, City, ST" autocapitalize="words"></div>
+  <div class="field"><label>Address</label>
+    <div style="position:relative;">
+      <input class="inp" id="addrInput" style="padding-right:42px;" placeholder="1234 Industrial Pkwy, City, ST" autocapitalize="words">
+      <button id="addrClear" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);color:var(--text);font-size:15px;line-height:1;">✕</button>
+    </div>
+  </div>
   <button class="btn primary" id="addrFind">Find building</button>
   <div class="hint" id="addrStatus" style="min-height:18px;margin-top:12px;color:var(--amber2);font-weight:700;"></div>
 </div>
@@ -424,10 +448,11 @@ function wallAt(sx,sy){
     if(distToSeg(sx,sy,a,b,c,d)<=10) return w;}
   return null;
 }
+function localPt(wx,wy,r){const cx=r.x+r.w/2,cy=r.y+r.h/2,a=-(r.rot||0)*Math.PI/180,co=Math.cos(a),si=Math.sin(a),dx=wx-cx,dy=wy-cy;return[dx*co-dy*si,dx*si+dy*co];}
 function roomAt(sx,sy){
   const[wx,wy]=s2w(sx,sy);
-  for(let i=S.rooms.length-1;i>=0;i--){const r=S.rooms[i];
-    if(wx>=r.x&&wx<=r.x+r.w&&wy>=r.y&&wy<=r.y+r.h) return r;}
+  for(let i=S.rooms.length-1;i>=0;i--){const r=S.rooms[i];const[lx,ly]=localPt(wx,wy,r);
+    if(Math.abs(lx)<=r.w/2&&Math.abs(ly)<=r.h/2) return r;}
   return null;
 }
 function distToSeg(px,py,x1,y1,x2,y2){
@@ -442,8 +467,8 @@ function columnAt(sx,sy){
 }
 function rackAt(sx,sy){
   const[wx,wy]=s2w(sx,sy);
-  for(let i=S.racking.length-1;i>=0;i--){const r=S.racking[i];
-    if(wx>=r.x&&wx<=r.x+r.w&&wy>=r.y&&wy<=r.y+r.h) return r;}
+  for(let i=S.racking.length-1;i>=0;i--){const r=S.racking[i];const[lx,ly]=localPt(wx,wy,r);
+    if(Math.abs(lx)<=r.w/2&&Math.abs(ly)<=r.h/2) return r;}
   return null;
 }
 function hitObject(sx,sy){
@@ -541,49 +566,52 @@ function drawScene(c, tx, fanR, dpr, live){
   }
   // rooms
   for(const r of S.rooms){
-    const[x,y]=P(r.x,r.y); const rw=r.w*u, rh=r.h*u; const seld=live&&sel&&sel.kind==="room"&&sel.id===r.id;
+    const sc=P(r.x+r.w/2,r.y+r.h/2); const rw=r.w*u, rh=r.h*u; const rot=(r.rot||0)*Math.PI/180;
+    const seld=live&&sel&&sel.kind==="room"&&sel.id===r.id;
+    c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
     c.fillStyle="rgba(47,107,255,.06)"; c.strokeStyle=seld?"#FF7A1A":"rgba(150,175,225,.55)"; c.lineWidth=(seld?3:2)*dpr;
-    roundRect(c,x,y,rw,rh,6*dpr); c.fill(); c.stroke();
+    roundRect(c,-rw/2,-rh/2,rw,rh,6*dpr); c.fill(); c.stroke();
     if(r.label){
       c.font=`600 ${12*dpr}px -apple-system,sans-serif`; c.textAlign="left"; c.textBaseline="middle";
-      const tw=c.measureText(r.label).width, px=x+8*dpr, py=y+12*dpr;
+      const tw=c.measureText(r.label).width, px=-rw/2+8*dpr, py=-rh/2+12*dpr;
       c.fillStyle="rgba(14,17,23,.78)"; roundRect(c,px-5*dpr,py-9*dpr,tw+10*dpr,18*dpr,5*dpr); c.fill();
       c.fillStyle="#E7ECF4"; c.fillText(r.label,px,py);
     }
+    c.restore();
   }
   // warehouse racking
   for(const r of S.racking){
-    const[bx,by]=P(r.x,r.y); const bw=r.w*u, bh=r.h*u; const seld=live&&sel&&sel.kind==="rack"&&sel.id===r.id;
-    const depth=Math.max(2,r.depth||16), aisle=Math.max(2,r.aisle||12), bay=Math.max(2,r.bay||8);
-    c.save(); c.beginPath(); c.rect(bx,by,bw,bh); c.clip();
-    const horiz=(r.dir||"h")==="h";
-    const period=(depth+aisle);
-    const drawBays=(horiz?r.w:r.h)/bay<=400;
+    const sc=P(r.x+r.w/2,r.y+r.h/2); const rw=r.w*u, rh=r.h*u; const rot=(r.rot||0)*Math.PI/180;
+    const seld=live&&sel&&sel.kind==="rack"&&sel.id===r.id;
+    const depth=Math.max(2,r.depth||16)*u, aisle=Math.max(2,r.aisle||12)*u, bay=Math.max(2,r.bay||8)*u;
+    const horiz=(r.dir||"h")==="h"; const period=depth+aisle;
+    const drawBays=(horiz?rw:rh)/bay<=400;
+    c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
+    c.beginPath(); c.rect(-rw/2,-rh/2,rw,rh); c.clip();
     let guard=0;
     if(horiz){
-      for(let yy=r.y; yy<r.y+r.h+period && guard<400; yy+=period, guard++){
-        const ry=P(r.x,yy)[1]; const rh=depth*u;
-        c.fillStyle="rgba(125,160,205,.20)"; c.fillRect(bx,ry,bw,rh);
-        c.strokeStyle="rgba(190,210,240,.65)"; c.lineWidth=1.4*dpr; c.strokeRect(bx+0.5,ry+0.5,bw,rh);
+      for(let yy=-rh/2; yy<rh/2+period && guard<400; yy+=period, guard++){
+        c.fillStyle="rgba(125,160,205,.20)"; c.fillRect(-rw/2,yy,rw,depth);
+        c.strokeStyle="rgba(190,210,240,.65)"; c.lineWidth=1.4*dpr; c.strokeRect(-rw/2+0.5,yy+0.5,rw,depth);
         c.strokeStyle="rgba(190,210,240,.35)"; c.lineWidth=1*dpr;
-        c.beginPath();c.moveTo(bx,ry+rh/2);c.lineTo(bx+bw,ry+rh/2);c.stroke();
+        c.beginPath();c.moveTo(-rw/2,yy+depth/2);c.lineTo(rw/2,yy+depth/2);c.stroke();
         if(drawBays){c.strokeStyle="rgba(210,225,250,.55)"; c.lineWidth=1*dpr;
-          for(let xx=r.x; xx<=r.x+r.w+bay; xx+=bay){const ux=P(xx,0)[0];c.beginPath();c.moveTo(ux,ry);c.lineTo(ux,ry+rh);c.stroke();}}
+          for(let xx=-rw/2; xx<=rw/2; xx+=bay){c.beginPath();c.moveTo(xx,yy);c.lineTo(xx,yy+depth);c.stroke();}}
       }
     } else {
-      for(let xx=r.x; xx<r.x+r.w+period && guard<400; xx+=period, guard++){
-        const rx=P(xx,0)[0]; const rw=depth*u;
-        c.fillStyle="rgba(125,160,205,.20)"; c.fillRect(rx,by,rw,bh);
-        c.strokeStyle="rgba(190,210,240,.65)"; c.lineWidth=1.4*dpr; c.strokeRect(rx+0.5,by+0.5,rw,bh);
+      for(let xx=-rw/2; xx<rw/2+period && guard<400; xx+=period, guard++){
+        c.fillStyle="rgba(125,160,205,.20)"; c.fillRect(xx,-rh/2,depth,rh);
+        c.strokeStyle="rgba(190,210,240,.65)"; c.lineWidth=1.4*dpr; c.strokeRect(xx+0.5,-rh/2+0.5,depth,rh);
         c.strokeStyle="rgba(190,210,240,.35)"; c.lineWidth=1*dpr;
-        c.beginPath();c.moveTo(rx+rw/2,by);c.lineTo(rx+rw/2,by+bh);c.stroke();
+        c.beginPath();c.moveTo(xx+depth/2,-rh/2);c.lineTo(xx+depth/2,rh/2);c.stroke();
         if(drawBays){c.strokeStyle="rgba(210,225,250,.55)"; c.lineWidth=1*dpr;
-          for(let yy=r.y; yy<=r.y+r.h+bay; yy+=bay){const uy=P(0,yy)[1];c.beginPath();c.moveTo(rx,uy);c.lineTo(rx+rw,uy);c.stroke();}}
+          for(let yy=-rh/2; yy<=rh/2; yy+=bay){c.beginPath();c.moveTo(xx,yy);c.lineTo(xx+depth,yy);c.stroke();}}
       }
     }
     c.restore();
+    c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
     c.strokeStyle=seld?"#FF7A1A":"rgba(150,175,225,.5)"; c.lineWidth=(seld?3:1.6)*dpr;
-    roundRect(c,bx,by,bw,bh,4*dpr); c.stroke();
+    roundRect(c,-rw/2,-rh/2,rw,rh,4*dpr); c.stroke(); c.restore();
   }
   // walls
   c.lineCap="round";
@@ -958,7 +986,7 @@ function renderSelBar(){
     mkBtn("Delete","danger",()=>{pushHistory();S.racking=S.racking.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="room"){
     hintSpan("Room"+(o.label?(" · "+o.label):""));
-    mkBtn("→ Racking","",()=>{pushHistory();const r={id:uid(),x:o.x,y:o.y,w:o.w,h:o.h,dir:o.w>=o.h?"h":"v",depth:16,aisle:12,bay:8};
+    mkBtn("→ Racking","",()=>{pushHistory();const r={id:uid(),x:o.x,y:o.y,w:o.w,h:o.h,rot:o.rot||0,dir:o.w>=o.h?"h":"v",depth:16,aisle:12,bay:8};
       S.racking.push(r);S.rooms=S.rooms.filter(x=>x.id!==o.id);sel={kind:"rack",id:r.id};refreshCtx();render();updateScope();openRack(r);});
     mkBtn("Delete","danger",()=>{pushHistory();S.rooms=S.rooms.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();});
   } else {
@@ -1038,6 +1066,28 @@ document.getElementById("gpsReset").addEventListener("click",()=>{gpsRef=null;ui
 /* ---------- building from address (OpenStreetMap) ---------- */
 document.getElementById("addAddress").addEventListener("click",()=>{closeSheet("add");document.getElementById("addrStatus").textContent="";openSheet("addr");});
 document.getElementById("addrFind").addEventListener("click",findBuildingByAddress);
+document.getElementById("addrClear").addEventListener("click",()=>{const el=document.getElementById("addrInput");el.value="";setAddrStatus("");el.focus();});
+/* ---------- rotate plan ---------- */
+let rotSession=0, rotLast=0;
+function rotatePlan(deg){
+  const b=contentBounds(); if(!b)return;
+  const cx=(b.minx+b.maxx)/2, cy=(b.miny+b.maxy)/2, a=deg*Math.PI/180, co=Math.cos(a), si=Math.sin(a);
+  const R=(x,y)=>{const dx=x-cx,dy=y-cy;return[cx+dx*co-dy*si, cy+dx*si+dy*co];};
+  S.walls.forEach(w=>{const p=R(w.x1,w.y1),q=R(w.x2,w.y2);w.x1=p[0];w.y1=p[1];w.x2=q[0];w.y2=q[1];});
+  S.fans.forEach(f=>{const p=R(f.x,f.y);f.x=p[0];f.y=p[1];if(f.reloX!=null){const q=R(f.reloX,f.reloY);f.reloX=q[0];f.reloY=q[1];}});
+  S.columns.forEach(p=>{const q=R(p.x,p.y);p.x=q[0];p.y=q[1];});
+  S.devices.forEach(d=>{const q=R(d.x,d.y);d.x=q[0];d.y=q[1];});
+  S.rooms.forEach(r=>{const q=R(r.x+r.w/2,r.y+r.h/2);r.x=q[0]-r.w/2;r.y=q[1]-r.h/2;r.rot=(r.rot||0)+deg;});
+  S.racking.forEach(r=>{const q=R(r.x+r.w/2,r.y+r.h/2);r.x=q[0]-r.w/2;r.y=q[1]-r.h/2;r.rot=(r.rot||0)+deg;});
+  render();
+}
+function openRotate(){rotSession=0;rotLast=0;document.getElementById("rotSlider").value=0;pushHistory();document.getElementById("rotpanel").classList.add("show");}
+document.getElementById("mRotate").addEventListener("click",()=>{closeSheet("menu");openRotate();});
+document.getElementById("rotSlider").addEventListener("input",e=>{const v=parseFloat(e.target.value);rotatePlan(v-rotLast);rotSession+=(v-rotLast);rotLast=v;});
+document.getElementById("rotL90").addEventListener("click",()=>{rotatePlan(-90);rotSession-=90;});
+document.getElementById("rotR90").addEventListener("click",()=>{rotatePlan(90);rotSession+=90;});
+document.getElementById("rotReset").addEventListener("click",()=>{rotatePlan(-rotSession);rotSession=0;rotLast=0;document.getElementById("rotSlider").value=0;});
+document.getElementById("rotDone").addEventListener("click",()=>{document.getElementById("rotpanel").classList.remove("show");scheduleSave();});
 function setAddrStatus(t){document.getElementById("addrStatus").textContent=t;}
 function pointInPoly(x,y,g){let inside=false;
   for(let i=0,j=g.length-1;i<g.length;j=i++){const xi=g[i].lon,yi=g[i].lat,xj=g[j].lon,yj=g[j].lat;
