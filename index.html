@@ -59,6 +59,10 @@ canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; d
 #banner{position:fixed; left:50%; transform:translateX(-50%); top:calc(env(safe-area-inset-top) + 56px); z-index:7; max-width:92%;
   background:var(--amber); color:#231200; font-weight:700; font-size:13px; padding:8px 14px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.4); display:none;}
 
+/* shared read-only view */
+body.shared #dock,body.shared #jobsBtn,body.shared #undoBtn,body.shared #redoBtn,body.shared #menuBtn,body.shared #scope{display:none!important;}
+body.shared #jobTap{pointer-events:none;}
+
 /* bg adjust panel */
 #bgpanel{position:fixed; left:0; right:0; bottom:0; z-index:8; padding:12px 14px calc(env(safe-area-inset-bottom) + 12px);
   background:var(--panel); border-top:1px solid var(--line); display:none;}
@@ -236,10 +240,8 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="grab"></div>
   <h3>Menu</h3>
   <div class="field"><button class="btn primary" id="mShare">Share image</button></div>
+  <div class="field"><button class="btn primary" id="mShare">Share interactive link</button></div>
   <div class="field"><button class="btn" id="mPdf">Export PDF / print</button></div>
-  <div class="field"><button class="btn" id="mSvg">Save zoomable vector (SVG)</button></div>
-  <div class="field"><button class="btn" id="mViewer">Interactive viewer (HTML)</button></div>
-  <div class="field"><button class="btn" id="mVpdf">Zoomable PDF (vector)</button></div>
   <div class="field"><button class="btn" id="mCsv">Export fan schedule (CSV)</button></div>
   <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
   <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
@@ -259,7 +261,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20v · Vector PDF zoom · White</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20w · Share interactive link</p>
 </div>
 
 <!-- Add sheet -->
@@ -398,6 +400,7 @@ let pending=null;          // {type:'room'|'wall', p1} | {type:'relocate', id}
 let editId=null;           // fan currently in edit sheet
 let sel=null;              // {kind:'fan'|'room'|'wall', id}
 let bgMode=false;
+let VIEWONLY=false;        // shared-link read-only mode
 let showChains=true;
 let showDims=true;
 let showBayGrid=true;
@@ -904,6 +907,7 @@ cv.addEventListener("wheel",e=>{e.preventDefault();const[mx,my]=getXY(e);const w
 
 function startGesture(sx,sy){
   g={sx,sy,lx:sx,ly:sy,moved:false,drag:null,pre:null};
+  if(VIEWONLY)return;
   if(bgMode){g.drag={kind:"bg"};return;}
   if(tool==="pan"){
     if(sel&&sel.kind==="wall"){const w=selObj();if(w){const end=wallEndHit(w,sx,sy);
@@ -1516,9 +1520,7 @@ document.getElementById("mClear").addEventListener("click",()=>{closeSheet("menu
 document.getElementById("mShare").addEventListener("click",()=>{closeSheet("menu");sharePNG();});
 document.getElementById("mPdf").addEventListener("click",()=>{closeSheet("menu");exportPDF();});
 document.getElementById("mCsv").addEventListener("click",()=>{closeSheet("menu");exportCSV();});
-document.getElementById("mSvg").addEventListener("click",()=>{closeSheet("menu");exportSVG();});
-document.getElementById("mViewer").addEventListener("click",()=>{closeSheet("menu");exportViewer();});
-document.getElementById("mVpdf").addEventListener("click",()=>{closeSheet("menu");pdfVector();});
+document.getElementById("mShare").addEventListener("click",()=>{closeSheet("menu");buildShareLink();});
 function svgScene(){
   const b=planBounds(); if(!b)return null;
   const pad=Math.max(20,(b.maxx-b.minx)*0.04);
@@ -1664,6 +1666,18 @@ function pdfVector(){
   offs.forEach(off=>{pdf+=String(off).padStart(10,'0')+' 00000 n \n';});
   pdf+='trailer\n<</Size '+(objs.length+1)+'/Root 1 0 R>>\nstartxref\n'+xp+'\n%%EOF';
   shareFile(pdf,'application/pdf','.pdf');
+}
+function buildShareLink(){
+  try{
+    const s=snapshot();
+    const data=JSON.stringify({job:s.job,rooms:s.rooms,walls:s.walls,fans:s.fans,columns:s.columns,racking:s.racking,devices:s.devices,links:s.links,bayGrid:s.bayGrid,brands:s.brands,nextNum:s.nextNum});
+    let b64=btoa(unescape(encodeURIComponent(data))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const url=location.origin+location.pathname+'#v='+b64;
+    if(url.length>200000){uiAlert("This plan is too big to share as a link. Use 'Remove stray items' or split the job, then try again.");return;}
+    if(navigator.share){navigator.share({title:(S.job||'Fan Layout')+' — Layout',url}).catch(()=>{});}
+    else if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>uiAlert("Interactive link copied. Paste it into a text or email."),()=>uiAlert(url));}
+    else uiAlert(url);
+  }catch(e){uiAlert("Couldn't build the link.");}
 }
 document.getElementById("mChains").addEventListener("click",()=>{showChains=!showChains;
   document.getElementById("mChains").textContent=showChains?"Hide chain links":"Show chain links";render();});
@@ -1955,7 +1969,20 @@ document.getElementById("restoreInput").addEventListener("change",e=>{
 
 /* ---------- boot ---------- */
 function boot(){
-  resize();const st=readStore();
+  resize();
+  const h=location.hash||"";
+  if(h.indexOf("#v=")===0){
+    try{
+      let b64=h.slice(3).replace(/-/g,"+").replace(/_/g,"/");while(b64.length%4)b64+="=";
+      const data=JSON.parse(decodeURIComponent(escape(atob(b64))));
+      VIEWONLY=true;document.body.classList.add("shared");tool="pan";
+      loadSnap(data);fitAll();
+      const ban=document.getElementById("banner");
+      if(ban){ban.textContent=(data.job?data.job+" · ":"")+"shared layout — pinch to zoom";ban.style.display="block";}
+      return;
+    }catch(e){VIEWONLY=false;document.body.classList.remove("shared");}
+  }
+  const st=readStore();
   if(st.current&&st.jobs[st.current])loadSnap(st.jobs[st.current]);
   else{view={x:innerWidth/2,y:innerHeight/2,scale:1};render();updateScope();}
   refreshFanSwatch();refreshCtx();
