@@ -64,6 +64,8 @@ body.shared #dock,body.shared #jobsBtn,body.shared #undoBtn,body.shared #redoBtn
 body.shared #jobTap{pointer-events:none;}
 .mhead{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7f8ba0;font-weight:800;margin:15px 2px 8px;}
 .mhead:first-of-type{margin-top:4px;}
+#colReadout{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(18,24,33,.94);border:1px solid var(--line);color:#e6edf6;padding:7px 15px;border-radius:999px;font-size:13.5px;font-weight:700;z-index:18;display:none;white-space:nowrap;box-shadow:0 5px 16px rgba(0,0,0,.45);}
+#colReadout b{color:#FF9A4D;}
 
 /* per-fan photos */
 .photostrip{display:flex;gap:8px;overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch;}
@@ -165,6 +167,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 </div>
 
 <div id="banner"></div>
+<div id="colReadout"></div>
 
 <div id="scope" class="closed">
   <div id="scopeCard">
@@ -277,7 +280,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21e · Footprint tool</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21g · Wire routing + length</p>
 </div>
 
 <!-- Layers sheet -->
@@ -289,6 +292,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
   <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
   <div class="field"><button class="btn" id="mBayGrid">Hide column grid</button></div>
+  <div class="field"><button class="btn" id="mColOff">Column offsets: off</button></div>
   <button class="btn primary" id="layersDone">Done</button>
 </div>
 
@@ -465,6 +469,7 @@ let VIEWONLY=false;        // shared-link read-only mode
 let showChains=true;
 let showDims=true;
 let showBayGrid=true;
+let showColOffsets=false;
 let wireType="fa";
 let bldUnit="ft";
 let wireFrom=null;   // {kind:'fan'|'device', id}
@@ -665,7 +670,30 @@ addEventListener("resize",resize);
 addEventListener("orientationchange",()=>setTimeout(resize,250));
 if(window.visualViewport){window.visualViewport.addEventListener("resize",resize);}
 function brandColor(i){const b=S.brands[i];return b?b.color:"#888";}
-function render(){drawScene(ctx, view, FAN_R*DPR, DPR, true);}
+function render(){drawScene(ctx, view, FAN_R*DPR, DPR, true);updateColReadout();}
+function gridLabel(col){
+  const g=S.bayGrid; if(!g||!g.ux) return null;
+  const i=Math.round((col.x-g.px)/g.ux);
+  const j=g.vy?Math.round((col.y-g.py)/g.vy):0;
+  if(i<0||i>=g.nx||j<0||j>=(g.ny||1)) return null;
+  const ex=g.px+i*g.ux, ey=g.py+j*(g.vy||0);
+  const tol=Math.max(2,(Math.abs(g.ux)||Math.abs(g.vy)||10)*0.15);
+  if(Math.hypot(col.x-ex,col.y-ey)>tol) return null;
+  return String.fromCharCode(65+(i%26))+(j+1);
+}
+function updateColReadout(){
+  const el=document.getElementById("colReadout"); if(!el) return;
+  if(!showColOffsets||!sel||sel.kind!=="fan"||!S.columns.length){el.style.display="none";return;}
+  const f=S.fans.find(x=>x.id===sel.id); if(!f){el.style.display="none";return;}
+  let best=null,bd=1e18;
+  for(const c of S.columns){const d=(c.x-f.x)*(c.x-f.x)+(c.y-f.y)*(c.y-f.y); if(d<bd){bd=d;best=c;}}
+  if(!best){el.style.display="none";return;}
+  const dx=f.x-best.x, dy=f.y-best.y, lab=gridLabel(best);
+  const xs=Math.abs(Math.round(dx))+"′ "+(dx>=0?"→":"←");
+  const ys=Math.abs(Math.round(dy))+"′ "+(dy>=0?"↓":"↑");
+  el.innerHTML="<b>"+(lab||"nearest column")+"</b> &nbsp; "+xs+" &nbsp; "+ys;
+  el.style.display="block";
+}
 
 function modTau(x){const t=Math.PI*2;return((x%t)+t)%t;}
 function strokeWireAround(c,ax,ay,bx,by,obs){
@@ -896,13 +924,13 @@ function drawScene(c, tx, fanR, dpr, live){
     const ca=nodeCenter(ln.a),cb=nodeCenter(ln.b); if(!ca||!cb)continue;
     const[ax,ay]=P(ca[0],ca[1]),[bx,by]=P(cb[0],cb[1]);
     const wr=WIRE[ln.type]||WIRE.fa; const seld=live&&sel&&sel.kind==="link"&&sel.id===ln.id;
-    const ea=ln.a.kind==="fan"?ln.a.id:null, eb=ln.b.kind==="fan"?ln.b.id:null;
-    const obs=[];
-    for(const f of S.fans){ if(f.id===ea||f.id===eb)continue;
-      const sp=P(f.x,f.y); obs.push({x:sp[0],y:sp[1],r:fanR+9*dpr}); }
-    c.strokeStyle=seld?"#FF7A1A":wr.color; c.lineWidth=(seld?4:2.6)*dpr; c.lineCap="round";
+    const off=(ln.type==="comm"?1:-1)*3.5*dpr;       // nudge the two types apart so parallel runs stay readable
+    const Ax=ax+off,Ay=ay+off,Bx=bx+off,By=by+off;
+    c.strokeStyle=seld?"#FF7A1A":wr.color; c.lineWidth=(seld?4:2.8)*dpr; c.lineCap="round"; c.lineJoin="round";
     c.setLineDash(wr.dash.map(v=>v*dpr));
-    strokeWireAround(c,ax,ay,bx,by,obs);
+    c.beginPath();c.moveTo(Ax,Ay);
+    if(ln.type==="comm"){c.lineTo(Ax,By);}else{c.lineTo(Bx,Ay);}   // comm: vertical-first, FA: horizontal-first
+    c.lineTo(Bx,By);c.stroke();
     c.setLineDash([]);
   }
   // daisy-chain links
@@ -1413,6 +1441,7 @@ function rotatePlan(deg){
 }
 function openRotate(){rotSession=0;rotLast=0;document.getElementById("rotSlider").value=0;pushHistory();document.getElementById("rotpanel").classList.add("show");}
 document.getElementById("tLayers").addEventListener("click",()=>openSheet("layers"));
+document.getElementById("mColOff").addEventListener("click",()=>{showColOffsets=!showColOffsets;document.getElementById("mColOff").textContent="Column offsets: "+(showColOffsets?"on":"off");render();});
 document.getElementById("layersDone").addEventListener("click",()=>closeSheet("layers"));
 document.getElementById("mRotate").addEventListener("click",()=>{closeSheet("menu");openRotate();});
 document.getElementById("addShell").addEventListener("click",()=>{closeSheet("add");openSheet("shell");});
@@ -1580,6 +1609,14 @@ function hideBanner(){document.getElementById("banner").style.display="none";}
 
 /* ---------- scope ---------- */
 document.getElementById("scopeHead").addEventListener("click",()=>document.getElementById("scope").classList.toggle("closed"));
+function wireEstimate(){
+  let fa=0,comm=0,faN=0,coN=0;
+  for(const ln of S.links){const a=nodeCenter(ln.a),b=nodeCenter(ln.b);if(!a||!b)continue;
+    const m=Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]); // right-angle run length, feet
+    if(ln.type==="comm"){comm+=m;coN++;}else{fa+=m;faN++;}}
+  const slack=1.15;
+  return {faN,coN,faFt:Math.round(fa),coFt:Math.round(comm),faEst:Math.round(fa*slack),coEst:Math.round(comm*slack)};
+}
 function updateScope(){
   const body=document.getElementById("scopeBody");body.innerHTML="";
   const total=S.fans.length,fa={Has:0,Needs:0,Maybe:0},st={Existing:0,Relocate:0,New:0,Remove:0},byB={};
@@ -1595,9 +1632,9 @@ function updateScope(){
   if(st.Remove)addPill(body,"✕ Remove <b>"+st.Remove+"</b>");
   const chains=Object.keys(chainGroups()).length;
   if(chains)addPill(body,"⛓ Chains <b>"+chains+"</b>");
-  const faW=S.links.filter(l=>l.type==="fa").length, coW=S.links.filter(l=>l.type==="comm").length;
-  if(faW)addPill(body,wline(WIRE.fa.color)+"FA wires <b>"+faW+"</b>");
-  if(coW)addPill(body,wline(WIRE.comm.color)+"Comm <b>"+coW+"</b>");
+  const we=wireEstimate();
+  if(we.faN)addPill(body,wline(WIRE.fa.color)+"FA <b>"+we.faN+"</b> · ≈"+we.faEst.toLocaleString()+" ft");
+  if(we.coN)addPill(body,wline(WIRE.comm.color)+"Comm <b>"+we.coN+"</b> · ≈"+we.coEst.toLocaleString()+" ft");
   if(S.devices.length)addPill(body,"▢ Devices <b>"+S.devices.length+"</b>");
   if(S.racking.length)addPill(body,"▦ Racking <b>"+S.racking.length+"</b>");
 }
@@ -2104,7 +2141,10 @@ function makeSheet(dpi){
   const p480=S.devices.filter(d=>d.type==="panel480").length, p208=S.devices.filter(d=>d.type==="panel208").length;
   const fapN=S.devices.filter(d=>d.type==="fap").length, ctl=S.devices.filter(d=>d.type==="controller").length, kp=S.devices.filter(d=>d.type==="keypad").length;
   if(faW||coW||p480||p208||fapN||ctl||kp){head("Wiring & devices");
-    if(faW)row("FA wire runs",faW,"#F87186"); if(coW)row("Comm runs",coW,"#34D399");
+    const we=wireEstimate();
+    if(faW){row("FA wire runs",faW,"#F87186");row("FA wire length","≈ "+we.faEst.toLocaleString()+" ft","#F87186");}
+    if(coW){row("Comm runs",coW,"#34D399");row("Comm length","≈ "+we.coEst.toLocaleString()+" ft","#34D399");}
+    if(faW||coW)row("Routing","right-angle +15%","#9aa6b8");
     if(p480)row("480V panels",p480,"#E0791B"); if(p208)row("120/208V panels",p208,"#5B8CF5");
     if(fapN)row("Fire-alarm panels",fapN); if(ctl)row("Master controllers",ctl); if(kp)row("Keypads",kp);
   }
