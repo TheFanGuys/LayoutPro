@@ -291,7 +291,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21h · Shell lock + comm line</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21i · Editable wire routes</p>
 </div>
 
 <!-- Layers sheet -->
@@ -664,11 +664,17 @@ function hitNode(sx,sy){
   const f=fanAt(sx,sy); if(f)return{kind:"fan",id:f.id};
   const d=deviceAt(sx,sy); if(d)return{kind:"device",id:d.id};
   return null;}
+function linkRoutePts(ln){
+  const a=nodeCenter(ln.a),b=nodeCenter(ln.b); if(!a||!b)return null;
+  if(ln.pts&&ln.pts.length)return [a].concat(ln.pts.map(p=>[p[0],p[1]])).concat([b]);
+  const corner=(ln.type==="comm")?[a[0],b[1]]:[b[0],a[1]];   // auto right-angle elbow
+  return [a,corner,b];
+}
 function linkAt(sx,sy){
   for(let i=S.links.length-1;i>=0;i--){const ln=S.links[i];
-    const ca=nodeCenter(ln.a),cb=nodeCenter(ln.b); if(!ca||!cb)continue;
-    const[a,b]=w2s(ca[0],ca[1]),[c,d]=w2s(cb[0],cb[1]);
-    if(distToSeg(sx,sy,a,b,c,d)<=8)return ln;}
+    const rt=linkRoutePts(ln); if(!rt)continue;
+    for(let k=0;k<rt.length-1;k++){const[x1,y1]=w2s(rt[k][0],rt[k][1]),[x2,y2]=w2s(rt[k+1][0],rt[k+1][1]);
+      if(distToSeg(sx,sy,x1,y1,x2,y2)<=10)return ln;}}
   return null;}
 function removeLinksFor(kind,id){S.links=S.links.filter(ln=>!((ln.a.kind===kind&&ln.a.id===id)||(ln.b.kind===kind&&ln.b.id===id)));}
 function sameNode(p,q){return p&&q&&p.kind===q.kind&&p.id===q.id;}
@@ -932,17 +938,16 @@ function drawScene(c, tx, fanR, dpr, live){
   }
   // wires (FA / comm)
   for(const ln of S.links){
-    const ca=nodeCenter(ln.a),cb=nodeCenter(ln.b); if(!ca||!cb)continue;
-    const[ax,ay]=P(ca[0],ca[1]),[bx,by]=P(cb[0],cb[1]);
+    const rt=linkRoutePts(ln); if(!rt)continue;
     const wr=WIRE[ln.type]||WIRE.fa; const seld=live&&sel&&sel.kind==="link"&&sel.id===ln.id;
     const off=(ln.type==="comm"?1:-1)*3.5*dpr;       // nudge the two types apart so parallel runs stay readable
-    const Ax=ax+off,Ay=ay+off,Bx=bx+off,By=by+off;
+    const sp=rt.map(pt=>{const q=P(pt[0],pt[1]);return [q[0]+off,q[1]+off];});
     c.strokeStyle=seld?"#FF7A1A":wr.color; c.lineWidth=(seld?4:2.8)*dpr; c.lineCap="round"; c.lineJoin="round";
     c.setLineDash(wr.dash.map(v=>v*dpr));
-    c.beginPath();c.moveTo(Ax,Ay);
-    if(ln.type==="comm"){c.lineTo(Ax,By);}else{c.lineTo(Bx,Ay);}   // comm: vertical-first, FA: horizontal-first
-    c.lineTo(Bx,By);c.stroke();
+    c.beginPath();c.moveTo(sp[0][0],sp[0][1]);for(let i=1;i<sp.length;i++)c.lineTo(sp[i][0],sp[i][1]);c.stroke();
     c.setLineDash([]);
+    if(seld&&ln.pts){c.fillStyle="#fff";c.strokeStyle="#FF7A1A";c.lineWidth=2*dpr;
+      for(const pt of ln.pts){const[hx,hy]=P(pt[0],pt[1]);c.beginPath();c.rect(hx-5*dpr,hy-5*dpr,10*dpr,10*dpr);c.fill();c.stroke();}}
   }
   // daisy-chain links
   if(showChains){
@@ -1116,6 +1121,7 @@ function startGesture(sx,sy){
   if(VIEWONLY)return;
   if(bgMode){g.drag={kind:"bg"};return;}
   if(tool==="pan"){
+    if(sel&&sel.kind==="link"){const o=selObj();if(o&&o.pts){for(let i=0;i<o.pts.length;i++){const[hx,hy]=w2s(o.pts[i][0],o.pts[i][1]);if(Math.hypot(sx-hx,sy-hy)<=18){g.drag={kind:"linkpt",link:o,index:i};g.pre=snap();return;}}}}
     if(sel&&sel.kind==="wall"){const w=selObj();if(w){const end=wallEndHit(w,sx,sy);
       if(end){const wx=end===1?w.x1:w.x2, wy=end===1?w.y1:w.y2;
         const group=[];
@@ -1137,7 +1143,9 @@ function moveGesture(sx,sy){
 }
 function moveObj(d,dx,dy){
   if(d.kind==="bg"){if(S.bg){S.bg.x=(S.bg.x||0)+dx/view.scale;S.bg.y=(S.bg.y||0)+dy/view.scale;}return;}
-  const o=d.obj; const wdx=dx/view.scale, wdy=dy/view.scale;
+  const wdx=dx/view.scale, wdy=dy/view.scale;
+  if(d.kind==="linkpt"){d.link.pts[d.index][0]+=wdx;d.link.pts[d.index][1]+=wdy;return;}
+  const o=d.obj;
   if(d.kind==="fan"){o.x+=wdx;o.y+=wdy;}
   else if(d.kind==="room"){o.x+=wdx;o.y+=wdy;}
   else if(d.kind==="column"){o.x+=wdx;o.y+=wdy;}
@@ -1331,6 +1339,20 @@ function renderWireBar(){
   hintSpan(wireFrom?("From "+nodeName(wireFrom)+" — tap next node"):"Tap a fan or device to start");
   mkBtn("Done","",()=>setTool("pan"));
 }
+function addLinkBend(ln){
+  if(!ln.pts||!ln.pts.length){
+    const a=nodeCenter(ln.a),b=nodeCenter(ln.b);if(!a||!b)return;
+    const corner=(ln.type==="comm")?[a[0],b[1]]:[b[0],a[1]];
+    pushHistory();ln.pts=[corner];
+  } else {
+    const rt=linkRoutePts(ln);let bi=0,bd=-1;
+    for(let k=0;k<rt.length-1;k++){const dx=rt[k+1][0]-rt[k][0],dy=rt[k+1][1]-rt[k][1];const d=dx*dx+dy*dy;if(d>bd){bd=d;bi=k;}}
+    const mx=(rt[bi][0]+rt[bi+1][0])/2,my=(rt[bi][1]+rt[bi+1][1])/2;
+    pushHistory();ln.pts.splice(bi,0,[mx,my]);
+  }
+  sel={kind:"link",id:ln.id};render();refreshCtx();scheduleSave();
+  showBanner("Drag the bend handle to route the wire along the aisle.");
+}
 function renderSelBar(){
   ctxInner.innerHTML="";
   const o=selObj(); if(!o){sel=null;ctxEl.classList.remove("show");return;}
@@ -1347,6 +1369,9 @@ function renderSelBar(){
   } else if(sel.kind==="link"){
     const wr=WIRE[o.type]||WIRE.fa;
     hintSpan(wr.label+": "+nodeName(o.a)+" ↔ "+nodeName(o.b));
+    mkBtn("Add bend","",()=>addLinkBend(o));
+    if(o.pts&&o.pts.length)mkBtn("Straighten","",()=>{pushHistory();o.pts=[];render();refreshCtx();scheduleSave();});
+    mkBtn(o.type==="fa"?"→ Comm":"→ FA","",()=>{pushHistory();o.type=(o.type==="fa"?"comm":"fa");render();refreshCtx();updateScope();scheduleSave();});
     mkBtn("Delete","danger",()=>{pushHistory();S.links=S.links.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="rack"){
     hintSpan(({rack:"Racking",conveyor:"Conveyor",office:"Office",production:"Production"}[o.fill||"rack"])+" · drag to move");
