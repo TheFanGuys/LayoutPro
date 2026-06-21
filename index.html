@@ -258,7 +258,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20t · Interactive viewer · White SVG</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20u · Viewer pinch fix · White SVG</p>
 </div>
 
 <!-- Add sheet -->
@@ -1569,23 +1569,26 @@ function exportSVG(){
 function exportViewer(){
   const sc=svgScene(); if(!sc){uiAlert("Draw a plan first.");return;}
   const title=(S.job||"Fan Layout").replace(/</g,"&lt;");
-  const svg="<svg id=\"plan\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\""+sc.vx+" "+sc.vy+" "+sc.vw+" "+sc.vh+"\" preserveAspectRatio=\"xMidYMid meet\" font-family=\"Arial,Helvetica,sans-serif\" style=\"width:100%;height:100%;display:block;touch-action:none;background:#fff\"><rect x=\""+sc.vx+"\" y=\""+sc.vy+"\" width=\""+sc.vw+"\" height=\""+sc.vh+"\" fill=\"#ffffff\"/>"+sc.body+"</svg>";
-  const js="(function(){var svg=document.getElementById('plan');"
+  const svg="<svg id=\"plan\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\""+sc.vx+" "+sc.vy+" "+sc.vw+" "+sc.vh+"\" preserveAspectRatio=\"xMidYMid meet\" font-family=\"Arial,Helvetica,sans-serif\" style=\"width:100%;height:100%;display:block;background:#fff;pointer-events:none\"><rect x=\""+sc.vx+"\" y=\""+sc.vy+"\" width=\""+sc.vw+"\" height=\""+sc.vh+"\" fill=\"#ffffff\"/>"+sc.body+"</svg>";
+  const js="(function(){"
+    +"var host=document.getElementById('stage'),svg=document.getElementById('plan');"
     +"var V={x:"+sc.vx+",y:"+sc.vy+",w:"+sc.vw+",h:"+sc.vh+"};var H={x:V.x,y:V.y,w:V.w,h:V.h};"
     +"function set(){svg.setAttribute('viewBox',V.x+' '+V.y+' '+V.w+' '+V.h);}"
-    +"function rect(){return svg.getBoundingClientRect();}"
-    +"function toW(px,py){var r=rect();var s=Math.min(r.width/V.w,r.height/V.h);var ox=(r.width-V.w*s)/2,oy=(r.height-V.h*s)/2;return{x:V.x+(px-r.left-ox)/s,y:V.y+(py-r.top-oy)/s};}"
-    +"function zoomAt(px,py,f){var w=toW(px,py);V.w*=f;V.h*=f;if(V.w>H.w*6){var k=H.w*6/V.w;V.w*=k;V.h*=k;}if(V.w<H.w*0.02){var k2=H.w*0.02/V.w;V.w*=k2;V.h*=k2;}var w2=toW(px,py);V.x+=w.x-w2.x;V.y+=w.y-w2.y;set();}"
-    +"var drag=null,pinch=null;"
-    +"svg.addEventListener('touchstart',function(e){if(e.touches.length===1){drag={x:e.touches[0].clientX,y:e.touches[0].clientY};}else if(e.touches.length===2){var a=e.touches[0],b=e.touches[1];pinch={d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)};drag=null;}e.preventDefault();},{passive:false});"
-    +"svg.addEventListener('touchmove',function(e){if(pinch&&e.touches.length===2){var a=e.touches[0],b=e.touches[1];var d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);var cx=(a.clientX+b.clientX)/2,cy=(a.clientY+b.clientY)/2;if(d>0){zoomAt(cx,cy,pinch.d/d);}pinch.d=d;}else if(drag&&e.touches.length===1){var t=e.touches[0];var r=rect();var s=Math.min(r.width/V.w,r.height/V.h);V.x-=(t.clientX-drag.x)/s;V.y-=(t.clientY-drag.y)/s;drag.x=t.clientX;drag.y=t.clientY;set();}e.preventDefault();},{passive:false});"
-    +"svg.addEventListener('touchend',function(e){if(e.touches.length===0){drag=null;pinch=null;}else if(e.touches.length===1){pinch=null;drag={x:e.touches[0].clientX,y:e.touches[0].clientY};}});"
-    +"svg.addEventListener('wheel',function(e){zoomAt(e.clientX,e.clientY,e.deltaY>0?1.12:0.89);e.preventDefault();},{passive:false});"
-    +"var md=null;svg.addEventListener('mousedown',function(e){md={x:e.clientX,y:e.clientY};});window.addEventListener('mousemove',function(e){if(md){var r=rect();var s=Math.min(r.width/V.w,r.height/V.h);V.x-=(e.clientX-md.x)/s;V.y-=(e.clientY-md.y)/s;md.x=e.clientX;md.y=e.clientY;set();}});window.addEventListener('mouseup',function(){md=null;});"
+    +"function rect(){return host.getBoundingClientRect();}"
+    +"function ppu(){var r=rect();return Math.min(r.width/V.w,r.height/V.h);}"
+    +"function toW(px,py){var r=rect();var s=ppu();var ox=(r.width-V.w*s)/2,oy=(r.height-V.h*s)/2;return{x:V.x+(px-r.left-ox)/s,y:V.y+(py-r.top-oy)/s};}"
+    +"function zoomAt(px,py,f){var w=toW(px,py);V.w*=f;V.h*=f;if(V.w>H.w*8){var k=H.w*8/V.w;V.w*=k;V.h*=k;}if(V.w<H.w*0.015){var k2=H.w*0.015/V.w;V.w*=k2;V.h*=k2;}var w2=toW(px,py);V.x+=w.x-w2.x;V.y+=w.y-w2.y;set();}"
+    +"var pts=new Map(),lastDist=0;"
+    +"host.addEventListener('pointerdown',function(e){try{host.setPointerCapture(e.pointerId);}catch(_){}pts.set(e.pointerId,{x:e.clientX,y:e.clientY});lastDist=0;e.preventDefault();});"
+    +"host.addEventListener('pointermove',function(e){if(!pts.has(e.pointerId))return;var prev=pts.get(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pts.size===1){var s=ppu();V.x-=(e.clientX-prev.x)/s;V.y-=(e.clientY-prev.y)/s;set();}else if(pts.size===2){var a=[];pts.forEach(function(v){a.push(v);});var d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);var cx=(a[0].x+a[1].x)/2,cy=(a[0].y+a[1].y)/2;if(lastDist>0&&d>0){zoomAt(cx,cy,lastDist/d);}lastDist=d;}e.preventDefault();});"
+    +"function up(e){pts.delete(e.pointerId);if(pts.size<2)lastDist=0;}"
+    +"host.addEventListener('pointerup',up);host.addEventListener('pointercancel',up);host.addEventListener('pointerleave',up);"
+    +"host.addEventListener('wheel',function(e){zoomAt(e.clientX,e.clientY,e.deltaY>0?1.12:0.89);e.preventDefault();},{passive:false});"
+    +"['gesturestart','gesturechange','gestureend'].forEach(function(g){host.addEventListener(g,function(e){e.preventDefault();});});"
     +"document.getElementById('reset').addEventListener('click',function(){V.x=H.x;V.y=H.y;V.w=H.w;V.h=H.h;set();});"
     +"})();";
   const html="<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no\"><title>"+title+" — Fan Layout</title>"
-    +"<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden;font-family:Arial,Helvetica,sans-serif}#bar{position:fixed;top:0;left:0;right:0;height:44px;background:#16202e;color:#fff;display:flex;align-items:center;padding:0 14px;font-weight:700;font-size:15px;z-index:5}#reset{margin-left:auto;background:#2b3950;border:0;color:#fff;font:inherit;font-size:13px;padding:7px 12px;border-radius:8px}#stage{position:fixed;top:44px;left:0;right:0;bottom:0}#hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:12px;padding:5px 11px;border-radius:9px;z-index:5;pointer-events:none}</style></head>"
+    +"<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden;font-family:Arial,Helvetica,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}#bar{position:fixed;top:0;left:0;right:0;height:44px;background:#16202e;color:#fff;display:flex;align-items:center;padding:0 14px;font-weight:700;font-size:15px;z-index:5}#reset{margin-left:auto;background:#2b3950;border:0;color:#fff;font:inherit;font-size:13px;padding:7px 12px;border-radius:8px}#stage{position:fixed;top:44px;left:0;right:0;bottom:0;touch-action:none;overflow:hidden}#hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:12px;padding:5px 11px;border-radius:9px;z-index:5;pointer-events:none}</style></head>"
     +"<body><div id=\"bar\">"+title+"<button id=\"reset\">Reset view</button></div><div id=\"stage\">"+svg+"</div><div id=\"hint\">Drag to pan · pinch or scroll to zoom</div>"
     +"<script>"+js+"<\/script></body></html>";
   shareFile(html,"text/html",".html");
