@@ -66,6 +66,11 @@ body.shared #jobTap{pointer-events:none;}
 .mhead:first-of-type{margin-top:4px;}
 #colReadout{position:fixed;left:50%;top:64px;transform:translateX(-50%);background:rgba(18,24,33,.94);border:1px solid var(--line);color:#e6edf6;padding:7px 15px;border-radius:999px;font-size:13.5px;font-weight:700;z-index:18;display:none;white-space:nowrap;box-shadow:0 5px 16px rgba(0,0,0,.45);}
 #colReadout b{color:#FF9A4D;}
+#shellBar{position:fixed;left:0;right:0;top:0;z-index:30;display:none;align-items:center;gap:9px;padding:calc(env(safe-area-inset-top) + 9px) 14px 9px;background:linear-gradient(#3c2c14,#2a1f0e);border-bottom:1px solid #5e4c24;}
+#shellBar.show{display:flex;}
+#shellBar span{flex:1;color:#ffce8a;font-weight:800;font-size:14px;}
+#shellBar button{background:#2b3950;border:0;color:#fff;padding:9px 14px;border-radius:9px;font:inherit;font-weight:700;}
+#shellBar button.primary{background:#FF7A1A;color:#1a1205;}
 
 /* per-fan photos */
 .photostrip{display:flex;gap:8px;overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch;}
@@ -168,6 +173,11 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 
 <div id="banner"></div>
 <div id="colReadout"></div>
+<div id="shellBar">
+  <span>Editing exterior shell</span>
+  <button id="shellTools">Tools</button>
+  <button id="shellSave" class="primary">Save &amp; exit</button>
+</div>
 
 <div id="scope" class="closed">
   <div id="scopeCard">
@@ -253,6 +263,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="grab"></div>
   <h3>Jobs</h3>
   <div class="field"><button class="btn primary" id="newJob">+ New job</button></div>
+  <div class="field"><button class="btn" id="jobsEditShell">Edit building shell…</button></div>
   <div class="list" id="jobsList"></div>
 </div>
 
@@ -280,7 +291,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21g · Wire routing + length</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21h · Shell lock + comm line</p>
 </div>
 
 <!-- Layers sheet -->
@@ -306,7 +317,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="shellTrace">Trace outline — walk the corners…</button></div>
   <div class="field"><button class="btn" id="addAddress">Building from address…</button></div>
   <div class="field"><button class="btn" id="shellDraw">Draw / edit walls by hand</button></div>
-  <button class="btn primary" id="shellDone">Done</button>
+  <button class="btn primary" id="shellDone">Close</button>
 </div>
 
 <!-- Add sheet -->
@@ -330,7 +341,6 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="mhead">Wiring</div>
   <div class="field"><button class="btn" id="addWire">FA / comm wire…</button></div>
   <div class="mhead">Structure</div>
-  <div class="field"><button class="btn" id="addShell">Building shell / exterior…</button></div>
   <div class="row">
     <button class="btn" id="addRoom">Room</button>
     <button class="btn" id="addWallTool">Wall</button>
@@ -460,6 +470,7 @@ let bgImg=null;
 let view={x:0,y:0,scale:1};
 let tool="pan";
 let orthoWall=false;
+let shellEditMode=false;
 let activeBrand=0;
 let pending=null;          // {type:'room'|'wall', p1} | {type:'relocate', id}
 let editId=null;           // fan currently in edit sheet
@@ -601,7 +612,7 @@ function hitObject(sx,sy){
   const f=fanAt(sx,sy); if(f)return{kind:"fan",id:f.id,obj:f};
   const dv=deviceAt(sx,sy); if(dv)return{kind:"device",id:dv.id,obj:dv};
   const p=columnAt(sx,sy); if(p)return{kind:"column",id:p.id,obj:p};
-  const w=wallAt(sx,sy); if(w)return{kind:"wall",id:w.id,obj:w};
+  const w=wallAt(sx,sy); if(w&&(shellEditMode||!w.shell))return{kind:"wall",id:w.id,obj:w};
   const m=rackAt(sx,sy); if(m)return{kind:"rack",id:m.id,obj:m};
   const ln=linkAt(sx,sy); if(ln)return{kind:"link",id:ln.id,obj:ln};
   const r=roomAt(sx,sy); if(r)return{kind:"room",id:r.id,obj:r};
@@ -1194,8 +1205,16 @@ function handleTap(sx,sy){
     }
     return;
   }
-  if(tool==="fap"||tool==="controller"||tool==="keypad"||tool==="panel480"||tool==="panel208"){pushHistory();
-    S.devices.push({id:uid(),type:tool,x:w[0],y:w[1],label:DEV[tool].code});render();updateScope();return;}
+  if(tool==="fap"||tool==="controller"||tool==="keypad"||tool==="panel480"||tool==="panel208"){
+    const tt=tool; pushHistory();
+    const dvId=uid();
+    S.devices.push({id:dvId,type:tt,x:w[0],y:w[1],label:DEV[tt].code});
+    if(tt==="controller"||tt==="keypad"){
+      setTool("wire");wireType="comm";wireFrom={kind:"device",id:dvId};refreshCtx();
+      showBanner("Now tap the fan it connects to — draws the comm line. (Tap empty space to skip.)");
+    }
+    render();updateScope();return;
+  }
   if(tool==="wire"){
     const n=hitNode(sx,sy);
     if(!n){wireFrom=null;render();return;}
@@ -1225,7 +1244,7 @@ function handleTap(sx,sy){
     if(orthoWall&&!closing){const l0=pending.pts[pending.pts.length-1];const dx=pt[0]-l0[0],dy=pt[1]-l0[1];if(Math.abs(dx)>=Math.abs(dy))pt=[pt[0],l0[1]];else pt=[l0[0],pt[1]];}
     pushHistory();
     const last=pending.pts[pending.pts.length-1];
-    S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:pt[0],y2:pt[1]});
+    S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:pt[0],y2:pt[1],shell:shellEditMode});
     if(closing){pending=null;refreshCtx();}else pending.pts.push(pt);
     render();return;
   }
@@ -1292,7 +1311,7 @@ function addOrthoSegment(dx,dy){
     const cc=s2w(innerWidth/2,innerHeight/2);pending={type:"wallchain",pts:[[Math.round(cc[0]),Math.round(cc[1])]]};
   }
   const last=pending.pts[pending.pts.length-1];const np=[last[0]+dx*ft,last[1]+dy*ft];
-  pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:np[0],y2:np[1]});
+  pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:np[0],y2:np[1],shell:shellEditMode});
   pending.pts.push(np);refreshCtx();render();fitAll();
 }
 function undoChainPt(){
@@ -1302,7 +1321,7 @@ function undoChainPt(){
 function closeChain(){
   if(!pending||pending.type!=="wallchain"||pending.pts.length<3){showBanner("Drop at least 3 corners first.");return;}
   const last=pending.pts[pending.pts.length-1],first=pending.pts[0];
-  if(last[0]!==first[0]||last[1]!==first[1]){pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:first[0],y2:first[1]});}
+  if(last[0]!==first[0]||last[1]!==first[1]){pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:first[0],y2:first[1],shell:shellEditMode});}
   pending=null;refreshCtx();render();fitAll();
 }
 function renderWireBar(){
@@ -1444,8 +1463,12 @@ document.getElementById("tLayers").addEventListener("click",()=>openSheet("layer
 document.getElementById("mColOff").addEventListener("click",()=>{showColOffsets=!showColOffsets;document.getElementById("mColOff").textContent="Column offsets: "+(showColOffsets?"on":"off");render();});
 document.getElementById("layersDone").addEventListener("click",()=>closeSheet("layers"));
 document.getElementById("mRotate").addEventListener("click",()=>{closeSheet("menu");openRotate();});
-document.getElementById("addShell").addEventListener("click",()=>{closeSheet("add");openSheet("shell");});
-document.getElementById("mShell").addEventListener("click",()=>{closeSheet("menu");openSheet("shell");});
+function enterShellEdit(){shellEditMode=true;sel=null;setTool("pan");document.getElementById("shellBar").classList.add("show");openSheet("shell");render();}
+function exitShellEdit(){shellEditMode=false;closeSheet("shell");document.getElementById("shellBar").classList.remove("show");sel=null;setTool("pan");saveAll();refreshCtx();render();}
+document.getElementById("shellTools").addEventListener("click",()=>openSheet("shell"));
+document.getElementById("shellSave").addEventListener("click",exitShellEdit);
+document.getElementById("jobsEditShell").addEventListener("click",()=>{closeSheet("jobs");enterShellEdit();});
+document.getElementById("mShell").addEventListener("click",()=>{closeSheet("menu");enterShellEdit();});
 document.getElementById("shellDone").addEventListener("click",()=>closeSheet("shell"));
 document.getElementById("shellTrace").addEventListener("click",()=>{closeSheet("shell");orthoWall=true;setTool("wall");showBanner("Walk the perimeter: tap each corner (it snaps square), or type feet + a ▸ direction. Tap the start dot to close.");});
 document.getElementById("shellDraw").addEventListener("click",()=>{closeSheet("shell");orthoWall=false;setTool("wall");showBanner("Tap to drop wall corners. Tap the first dot to close the shape.");});
@@ -1499,7 +1522,7 @@ function drawOsmBuildings(group,refLat,refLng){
     const pts=w.geometry.map(g=>[cc[0]+(g.lon-refLng)*mLng*3.28084, cc[1]-(g.lat-refLat)*mLat*3.28084]);
     for(let i=0;i<pts.length-1;i++){
       if(pts[i][0]===pts[i+1][0]&&pts[i][1]===pts[i+1][1])continue;
-      S.walls.push({id:uid(),x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1]});
+      S.walls.push({id:uid(),x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1],shell:true});
     }
   }
   setTool("pan");render();updateScope();fitAll();
@@ -1554,10 +1577,10 @@ function createBuilding(){
   pushHistory();
   const cw=s2w(innerWidth/2,innerHeight/2);
   const ax=cw[0]-W/2, ay=cw[1]-L/2, bx=cw[0]+W/2, by=cw[1]+L/2;
-  S.walls.push({id:uid(),x1:ax,y1:ay,x2:bx,y2:ay});
-  S.walls.push({id:uid(),x1:bx,y1:ay,x2:bx,y2:by});
-  S.walls.push({id:uid(),x1:bx,y1:by,x2:ax,y2:by});
-  S.walls.push({id:uid(),x1:ax,y1:by,x2:ax,y2:ay});
+  S.walls.push({id:uid(),x1:ax,y1:ay,x2:bx,y2:ay,shell:true});
+  S.walls.push({id:uid(),x1:bx,y1:ay,x2:bx,y2:by,shell:true});
+  S.walls.push({id:uid(),x1:bx,y1:by,x2:ax,y2:by,shell:true});
+  S.walls.push({id:uid(),x1:ax,y1:by,x2:ax,y2:ay,shell:true});
   closeSheet("building");setTool("pan");fitAll();render();
 }
 document.getElementById("tFit").addEventListener("click",fitAll);
@@ -1752,7 +1775,7 @@ document.getElementById("newJob").addEventListener("click",()=>{
     if(!nm)return;
     saveAll();S=blankState();S.job=nm;bgImg=null;undoStack=[];redoStack=[];sel=null;refreshUndo();
     view={x:innerWidth/2,y:innerHeight/2,scale:1};document.getElementById("jobName").textContent=nm;
-    updatePhotoMenu();render();updateScope();refreshCtx();saveAll();closeSheet("jobs");openSheet("shell");});
+    updatePhotoMenu();render();updateScope();refreshCtx();saveAll();closeSheet("jobs");enterShellEdit();});
 });
 
 /* ---------- menu ---------- */
