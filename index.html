@@ -291,7 +291,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21i · Editable wire routes</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21j · Named boxes + wire avoidance</p>
 </div>
 
 <!-- Layers sheet -->
@@ -664,11 +664,49 @@ function hitNode(sx,sy){
   const f=fanAt(sx,sy); if(f)return{kind:"fan",id:f.id};
   const d=deviceAt(sx,sy); if(d)return{kind:"device",id:d.id};
   return null;}
+function rectBBox(o){
+  const cx=o.x+o.w/2,cy=o.y+o.h/2,rot=(o.rot||0)*Math.PI/180;
+  if(!rot)return {x0:o.x,y0:o.y,x1:o.x+o.w,y1:o.y+o.h};
+  const pts=[[o.x,o.y],[o.x+o.w,o.y],[o.x+o.w,o.y+o.h],[o.x,o.y+o.h]].map(p=>{const dx=p[0]-cx,dy=p[1]-cy;return [cx+dx*Math.cos(rot)-dy*Math.sin(rot),cy+dx*Math.sin(rot)+dy*Math.cos(rot)];});
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  return {x0:Math.min.apply(0,xs),y0:Math.min.apply(0,ys),x1:Math.max.apply(0,xs),y1:Math.max.apply(0,ys)};
+}
+function barrierRects(){
+  const out=[];
+  S.racking.forEach(r=>{if(r.barrier!==false)out.push(rectBBox(r));});
+  S.rooms.forEach(r=>{if(r.barrier)out.push(rectBBox(r));});
+  return out;
+}
+function segCrossesRect(ax,ay,bx,by,R){
+  if(Math.max(ax,bx)<R.x0||Math.min(ax,bx)>R.x1||Math.max(ay,by)<R.y0||Math.min(ay,by)>R.y1)return false;
+  const inside=(x,y)=>x>=R.x0&&x<=R.x1&&y>=R.y0&&y<=R.y1;
+  if(inside(ax,ay)||inside(bx,by))return true;
+  const I=(x1,y1,x2,y2,x3,y3,x4,y4)=>{const d=(x2-x1)*(y4-y3)-(y2-y1)*(x4-x3);if(!d)return false;const t=((x3-x1)*(y4-y3)-(y3-y1)*(x4-x3))/d,u=((x3-x1)*(y2-y1)-(y3-y1)*(x2-x1))/d;return t>=0&&t<=1&&u>=0&&u<=1;};
+  return I(ax,ay,bx,by,R.x0,R.y0,R.x1,R.y0)||I(ax,ay,bx,by,R.x1,R.y0,R.x1,R.y1)||I(ax,ay,bx,by,R.x1,R.y1,R.x0,R.y1)||I(ax,ay,bx,by,R.x0,R.y1,R.x0,R.y0);
+}
+function routeClears(pts,rects){for(let k=0;k<pts.length-1;k++)for(const R of rects)if(segCrossesRect(pts[k][0],pts[k][1],pts[k+1][0],pts[k+1][1],R))return false;return true;}
+function routeLen(pts){let s=0;for(let k=0;k<pts.length-1;k++)s+=Math.abs(pts[k+1][0]-pts[k][0])+Math.abs(pts[k+1][1]-pts[k][1]);return s;}
+function autoElbows(a,b,type){
+  const c1=(type==="comm")?[a[0],b[1]]:[b[0],a[1]];
+  const c2=(type==="comm")?[b[0],a[1]]:[a[0],b[1]];
+  const all=barrierRects(); if(!all.length)return [c1];
+  const inR=(p,R)=>p[0]>=R.x0&&p[0]<=R.x1&&p[1]>=R.y0&&p[1]<=R.y1;
+  const rs=all.filter(R=>!inR(a,R)&&!inR(b,R));
+  if(!rs.length)return [c1];
+  if(routeClears([a,c1,b],rs))return [c1];
+  if(routeClears([a,c2,b],rs))return [c2];
+  const block=rs.filter(R=>!routeClears([a,c1,b],[R])||!routeClears([a,c2,b],[R]));
+  if(!block.length)return [c1];
+  const X0=Math.min.apply(0,block.map(R=>R.x0)),Y0=Math.min.apply(0,block.map(R=>R.y0)),X1=Math.max.apply(0,block.map(R=>R.x1)),Y1=Math.max.apply(0,block.map(R=>R.y1)),m=6;
+  const cand=[[[a[0],Y0-m],[b[0],Y0-m]],[[a[0],Y1+m],[b[0],Y1+m]],[[X0-m,a[1]],[X0-m,b[1]]],[[X1+m,a[1]],[X1+m,b[1]]]];
+  let best=null,bl=1e18;
+  for(const wps of cand){const route=[a].concat(wps).concat([b]);if(routeClears(route,rs)){const L=routeLen(route);if(L<bl){bl=L;best=wps;}}}
+  return best||[c1];
+}
 function linkRoutePts(ln){
   const a=nodeCenter(ln.a),b=nodeCenter(ln.b); if(!a||!b)return null;
   if(ln.pts&&ln.pts.length)return [a].concat(ln.pts.map(p=>[p[0],p[1]])).concat([b]);
-  const corner=(ln.type==="comm")?[a[0],b[1]]:[b[0],a[1]];   // auto right-angle elbow
-  return [a,corner,b];
+  return [a].concat(autoElbows(a,b,ln.type)).concat([b]);
 }
 function linkAt(sx,sy){
   for(let i=S.links.length-1;i>=0;i--){const ln=S.links[i];
@@ -899,7 +937,9 @@ function drawScene(c, tx, fanR, dpr, live){
     c.restore();
     c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
     c.strokeStyle=seld?"#FF7A1A":"rgba(150,175,225,.5)"; c.lineWidth=(seld?3:1.6)*dpr;
-    roundRect(c,-rw/2,-rh/2,rw,rh,4*dpr); c.stroke(); c.restore();
+    roundRect(c,-rw/2,-rh/2,rw,rh,4*dpr); c.stroke();
+    if(r.label){c.font=`600 ${12*dpr}px -apple-system,sans-serif`;c.textAlign="left";c.textBaseline="middle";const tw=c.measureText(r.label).width,px=-rw/2+8*dpr,py=-rh/2+12*dpr;c.fillStyle="rgba(14,17,23,.82)";roundRect(c,px-5*dpr,py-9*dpr,tw+10*dpr,18*dpr,5*dpr);c.fill();c.fillStyle="#E7ECF4";c.fillText(r.label,px,py);}
+    c.restore();
   }
   // walls
   c.lineCap="round";
@@ -1374,13 +1414,17 @@ function renderSelBar(){
     mkBtn(o.type==="fa"?"→ Comm":"→ FA","",()=>{pushHistory();o.type=(o.type==="fa"?"comm":"fa");render();refreshCtx();updateScope();scheduleSave();});
     mkBtn("Delete","danger",()=>{pushHistory();S.links=S.links.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="rack"){
-    hintSpan(({rack:"Racking",conveyor:"Conveyor",office:"Office",production:"Production"}[o.fill||"rack"])+" · drag to move");
+    hintSpan(({rack:"Racking",conveyor:"Conveyor",office:"Office",production:"Production"}[o.fill||"rack"])+(o.label?(" · "+o.label):""));
     mkBtn("Edit","",()=>openRack(o));
+    mkBtn("Name","",()=>uiPrompt("Area name",o.label||"",v=>{pushHistory();o.label=v||"";render();scheduleSave();}));
+    mkBtn(o.barrier===false?"Barrier: off":"Barrier: on","",()=>{pushHistory();o.barrier=(o.barrier===false);refreshCtx();render();scheduleSave();});
     mkBtn("Delete","danger",()=>{pushHistory();S.racking=S.racking.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="room"){
-    hintSpan("Room"+(o.label?(" · "+o.label):""));
-    mkBtn("→ Racking","",()=>{pushHistory();const r={id:uid(),x:o.x,y:o.y,w:o.w,h:o.h,rot:o.rot||0,dir:o.w>=o.h?"h":"v",depth:16,aisle:12,bay:8};
+    hintSpan("Box"+(o.label?(" · "+o.label):""));
+    mkBtn("Name","",()=>uiPrompt("Box name",o.label||"",v=>{pushHistory();o.label=v||"";render();scheduleSave();}));
+    mkBtn("Fill / office…","",()=>{pushHistory();const r={id:uid(),x:o.x,y:o.y,w:o.w,h:o.h,rot:o.rot||0,dir:o.w>=o.h?"h":"v",depth:16,aisle:12,bay:8,fill:"office",label:o.label||"",barrier:true};
       S.racking.push(r);S.rooms=S.rooms.filter(x=>x.id!==o.id);sel={kind:"rack",id:r.id};refreshCtx();render();updateScope();openRack(r);});
+    mkBtn(o.barrier?"Barrier: on":"Barrier: off","",()=>{pushHistory();o.barrier=!o.barrier;refreshCtx();render();scheduleSave();});
     mkBtn("Delete","danger",()=>{pushHistory();S.rooms=S.rooms.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();});
   } else {
     hintSpan(sel.kind==="wall"?"Wall · drag the end dots to reshape":("Selected "+sel.kind));
