@@ -308,7 +308,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21r · Wires avoid fans + tour</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21t · FA/comm taps</p>
 </div>
 
 <!-- Help & tour wizard (live guide, pinned top) -->
@@ -489,7 +489,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 <script>
 "use strict";
 (function(){
-const FAN_R=17, SLOP=8, LS_KEY="fanlayout.v1";
+const FAN_R=17, SLOP=8, FAN_KEEP=2.5, LS_KEY="fanlayout.v1";
 const STATUSES=["Existing","Relocate","New","Remove"];
 const FAS=["Has","Needs","Maybe"];
 const FA_COLOR={Has:"#22C55E",Needs:"#EF4444",Maybe:"#F5B82E"};
@@ -533,7 +533,7 @@ let memStore={current:null,jobs:{}};
 let storageOK=(function(){try{localStorage.setItem("__t","1");localStorage.removeItem("__t");return true;}catch(e){return false;}})();
 
 function blankState(){
-  return {job:"Untitled job", bg:null, rooms:[], walls:[], fans:[], columns:[], racking:[], devices:[], links:[], bayGrid:null,
+  return {job:"Untitled job", bg:null, rooms:[], walls:[], fans:[], columns:[], racking:[], devices:[], links:[], taps:[], bayGrid:null,
           brands:JSON.parse(JSON.stringify(DEFAULT_BRANDS)), nextNum:1};
 }
 function uid(){return Math.random().toString(36).slice(2,9);}
@@ -591,7 +591,7 @@ document.getElementById("modalCopy").addEventListener("click",()=>{const b=docum
 document.getElementById("modalShare").addEventListener("click",()=>{const url=document.getElementById("modalInput").value;if(navigator.share)navigator.share({title:"Fan Layout",url}).catch(()=>{});});
 
 /* ---------- history ---------- */
-function snap(){return clone({rooms:S.rooms,walls:S.walls,fans:S.fans,columns:S.columns,racking:S.racking,devices:S.devices,links:S.links,brands:S.brands,nextNum:S.nextNum,bg:S.bg});}
+function snap(){return clone({rooms:S.rooms,walls:S.walls,fans:S.fans,columns:S.columns,racking:S.racking,devices:S.devices,links:S.links,taps:S.taps,brands:S.brands,nextNum:S.nextNum,bg:S.bg});}
 function pushHistory(){undoStack.push(snap()); if(undoStack.length>25)undoStack.shift(); redoStack=[]; refreshUndo();}
 function applySnap(s){
   const bgChanged=JSON.stringify(S.bg)!==JSON.stringify(s.bg);
@@ -647,6 +647,7 @@ function rackAt(sx,sy){
 function hitObject(sx,sy){
   const f=fanAt(sx,sy); if(f)return{kind:"fan",id:f.id,obj:f};
   const dv=deviceAt(sx,sy); if(dv)return{kind:"device",id:dv.id,obj:dv};
+  const tp=tapAt(sx,sy); if(tp)return{kind:"tap",id:tp.id,obj:tp};
   const p=columnAt(sx,sy); if(p)return{kind:"column",id:p.id,obj:p};
   const w=wallAt(sx,sy); if(w&&(shellEditMode||!w.shell))return{kind:"wall",id:w.id,obj:w};
   const m=rackAt(sx,sy); if(m)return{kind:"rack",id:m.id,obj:m};
@@ -686,16 +687,41 @@ function findNode(ref){if(!ref)return null;
   if(ref.kind==="fan")return S.fans.find(f=>f.id===ref.id);
   if(ref.kind==="device")return S.devices.find(d=>d.id===ref.id);
   return null;}
-function nodeCenter(ref){const o=findNode(ref);if(!o)return null;
+function nodeCenter(ref){
+  if(ref.kind==="tap"){const t=(S.taps||[]).find(x=>x.id===ref.id);return t?[t.x,t.y]:null;}
+  const o=findNode(ref);if(!o)return null;
   if(ref.kind==="fan"){const x=(o.status==="Relocate"&&o.reloX!=null)?o.reloX:o.x,y=(o.status==="Relocate"&&o.reloY!=null)?o.reloY:o.y;return[x,y];}
   return[o.x,o.y];}
-function nodeName(ref){const o=findNode(ref);if(!o)return "?";
+function nodeName(ref){
+  if(ref.kind==="tap")return "Tap";
+  const o=findNode(ref);if(!o)return "?";
   if(ref.kind==="fan")return "Fan "+(o.label||"?");
   return o.label||DEV[o.type].code;}
 function deviceAt(sx,sy){
   for(let i=S.devices.length-1;i>=0;i--){const d=S.devices[i];const[cx,cy]=w2s(d.x,d.y);
     if(Math.abs(sx-cx)<=DEV_SH+3&&Math.abs(sy-cy)<=DEV_SH+3)return d;}
   return null;}
+function tapAt(sx,sy){
+  for(let i=(S.taps||[]).length-1;i>=0;i--){const t=S.taps[i];const[cx,cy]=w2s(t.x,t.y);
+    if(Math.hypot(sx-cx,sy-cy)<=11)return t;}
+  return null;}
+function nearestOnSeg(p,a,b){
+  const dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy;
+  let t=l2?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l2:0; t=Math.max(0,Math.min(1,t));
+  return [a[0]+t*dx,a[1]+t*dy];}
+function nearestOnRoute(ln,w){
+  const rt=linkRoutePts(ln); if(!rt||rt.length<2)return w.slice();
+  let best=w.slice(),bd=1e18;
+  for(let k=0;k<rt.length-1;k++){const p=nearestOnSeg(w,rt[k],rt[k+1]);const d=(p[0]-w[0])**2+(p[1]-w[1])**2;if(d<bd){bd=d;best=p;}}
+  return best;}
+function createTap(from,ln,sx,sy){
+  const w=s2w(sx,sy), proj=nearestOnRoute(ln,w);
+  pushHistory();
+  const tapId=uid();
+  S.taps.push({id:tapId,x:proj[0],y:proj[1]});
+  S.links.push({id:uid(),type:ln.type,a:from,b:{kind:"tap",id:tapId}});  // branch matches the wire it taps into
+  wireFrom=null; updateScope(); refreshCtx(); render();
+  showBanner("Tap added — the branch ties into the "+(WIRE[ln.type]||WIRE.fa).label.replace(" wire","")+" trunk here.");}
 function hitNode(sx,sy){
   const f=fanAt(sx,sy); if(f)return{kind:"fan",id:f.id};
   const d=deviceAt(sx,sy); if(d)return{kind:"device",id:d.id};
@@ -713,7 +739,7 @@ function barrierRects(){
   const out=[];
   S.racking.forEach(r=>{if(r.barrier!==false)out.push(rectBBox(r));});
   S.rooms.forEach(r=>{if(r.barrier)out.push(rectBBox(r));});
-  const fr=(FAN_R+3)/(view.scale||1);           // fan-icon footprint in world units (matches the drawn icon)
+  const fr=FAN_KEEP;                              // fixed real-world keep-out so the route never depends on zoom
   S.fans.forEach(f=>{const p=fanPos(f);out.push({x0:p[0]-fr,y0:p[1]-fr,x1:p[0]+fr,y1:p[1]+fr});});
   S.devices.forEach(d=>{out.push({x0:d.x-fr,y0:d.y-fr,x1:d.x+fr,y1:d.y+fr});});
   _barrierCache=out;return out;
@@ -1038,6 +1064,15 @@ function drawScene(c, tx, fanR, dpr, live){
     if(seld&&ln.pts){c.fillStyle="#fff";c.strokeStyle="#FF7A1A";c.lineWidth=2*dpr;
       for(const pt of ln.pts){const[hx,hy]=P(pt[0],pt[1]);c.beginPath();c.rect(hx-5*dpr,hy-5*dpr,10*dpr,10*dpr);c.fill();c.stroke();}}
   }
+  // FA/comm taps (junction dots on the trunk)
+  for(const t of (S.taps||[])){
+    const br=S.links.find(l=>(l.b.kind==="tap"&&l.b.id===t.id)||(l.a.kind==="tap"&&l.a.id===t.id));
+    const col=br?((WIRE[br.type]||WIRE.fa).color):WIRE.fa.color;
+    const seld=live&&sel&&sel.kind==="tap"&&sel.id===t.id;
+    const[x,y]=P(t.x,t.y);
+    c.beginPath();c.arc(x,y,(seld?6.5:5)*dpr,0,7);c.fillStyle=seld?"#FF7A1A":col;c.fill();
+    c.lineWidth=2*dpr;c.strokeStyle=TH.bg;c.stroke();
+  }
   // daisy-chain links
   if(showChains){
     const groups=chainGroups();
@@ -1241,6 +1276,7 @@ function moveObj(d,dx,dy){
   else if(d.kind==="column"){o.x+=wdx;o.y+=wdy;}
   else if(d.kind==="rack"){o.x+=wdx;o.y+=wdy;}
   else if(d.kind==="device"){o.x+=wdx;o.y+=wdy;}
+  else if(d.kind==="tap"){o.x+=wdx;o.y+=wdy;}
   else if(d.kind==="wall"){o.x1+=wdx;o.y1+=wdy;o.x2+=wdx;o.y2+=wdy;}
   else if(d.kind==="wallpt"){d.group.forEach(it=>{const o2=it.wall;if(it.end===1){o2.x1+=wdx;o2.y1+=wdy;}else{o2.x2+=wdx;o2.y2+=wdy;}});}
 }
@@ -1315,7 +1351,10 @@ function handleTap(sx,sy){
   }
   if(tool==="wire"){
     const n=hitNode(sx,sy);
-    if(!n){wireFrom=null;render();return;}
+    if(!n){
+      if(wireFrom){const ln=linkAt(sx,sy);if(ln){createTap(wireFrom,ln,sx,sy);return;}}
+      wireFrom=null;render();return;
+    }
     if(!wireFrom){wireFrom=n;render();return;}
     if(sameNode(wireFrom,n)){wireFrom=null;render();return;}
     if(!linkExists(wireFrom,n,wireType)){pushHistory();S.links.push({id:uid(),type:wireType,a:wireFrom,b:n});updateScope();}
@@ -1426,7 +1465,7 @@ function renderWireBar(){
   ctxInner.innerHTML="";
   ["fa","comm"].forEach(t=>{const b=document.createElement("button");b.className="cbtn"+(wireType===t?" primary":"");
     b.textContent=WIRE[t].label;b.style.flex="0 0 auto";b.onclick=()=>{wireType=t;renderWireBar();};ctxInner.appendChild(b);});
-  hintSpan(wireFrom?("From "+nodeName(wireFrom)+" — tap next node"):"Tap a fan or device to start");
+  hintSpan(wireFrom?("From "+nodeName(wireFrom)+" — tap a fan/device, or tap a wire to tap in"):"Tap a fan or device to start");
   mkBtn("Done","",()=>setTool("pan"));
 }
 function addLinkBend(ln){
@@ -1477,6 +1516,11 @@ function renderSelBar(){
       S.racking.push(r);S.rooms=S.rooms.filter(x=>x.id!==o.id);sel={kind:"rack",id:r.id};refreshCtx();render();updateScope();openRack(r);});
     mkBtn(o.barrier?"Barrier: on":"Barrier: off","",()=>{pushHistory();o.barrier=!o.barrier;refreshCtx();render();scheduleSave();});
     mkBtn("Delete","danger",()=>{pushHistory();S.rooms=S.rooms.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();});
+  } else if(sel.kind==="tap"){
+    const br=S.links.find(l=>(l.b.kind==="tap"&&l.b.id===o.id)||(l.a.kind==="tap"&&l.a.id===o.id));
+    hintSpan(((br?(WIRE[br.type]||WIRE.fa).label.replace(" wire",""):"FA")+" tap · drag to slide along the trunk"));
+    mkBtn("Delete","danger",()=>{pushHistory();S.links=S.links.filter(l=>!((l.a.kind==="tap"&&l.a.id===o.id)||(l.b.kind==="tap"&&l.b.id===o.id)));S.taps=S.taps.filter(x=>x.id!==o.id);sel=null;hideBanner();refreshCtx();render();updateScope();});
+    mkBtn("Done","",()=>{sel=null;hideBanner();refreshCtx();render();});
   } else {
     hintSpan(sel.kind==="wall"?"Wall · drag the end dots to reshape":("Selected "+sel.kind));
     mkBtn("Delete","danger",()=>{pushHistory();S[sel.kind+"s"]=S[sel.kind+"s"].filter(x=>x.id!==sel.id);sel=null;refreshCtx();render();});
@@ -1923,11 +1967,11 @@ function fitAll(){
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveAll,500);}
 function readStore(){if(!storageOK)return memStore;try{return JSON.parse(localStorage.getItem(LS_KEY))||{current:null,jobs:{}};}catch(e){return memStore;}}
 function writeStore(o){if(!storageOK){memStore=o;return true;}try{localStorage.setItem(LS_KEY,JSON.stringify(o));return true;}catch(e){return false;}}
-function snapshot(){return{job:S.job,bg:S.bg,rooms:S.rooms,walls:S.walls,fans:S.fans,columns:S.columns,racking:S.racking,devices:S.devices,links:S.links,bayGrid:S.bayGrid,brands:S.brands,nextNum:S.nextNum,view};}
+function snapshot(){return{job:S.job,bg:S.bg,rooms:S.rooms,walls:S.walls,fans:S.fans,columns:S.columns,racking:S.racking,devices:S.devices,links:S.links,taps:S.taps,bayGrid:S.bayGrid,brands:S.brands,nextNum:S.nextNum,view};}
 function saveAll(){const st=readStore();st.jobs[S.job]=snapshot();st.current=S.job;
   if(!writeStore(st))uiAlert("Couldn't save — storage is full. Back up, then clear old jobs.");}
 function loadSnap(s){
-  S={job:s.job,bg:s.bg||null,rooms:s.rooms||[],walls:s.walls||[],fans:s.fans||[],columns:s.columns||[],racking:s.racking||[],devices:s.devices||[],links:s.links||[],bayGrid:s.bayGrid||null,
+  S={job:s.job,bg:s.bg||null,rooms:s.rooms||[],walls:s.walls||[],fans:s.fans||[],columns:s.columns||[],racking:s.racking||[],devices:s.devices||[],links:s.links||[],taps:s.taps||[],bayGrid:s.bayGrid||null,
      brands:s.brands||JSON.parse(JSON.stringify(DEFAULT_BRANDS)),nextNum:s.nextNum||1};
   view=s.view||{x:innerWidth/2,y:innerHeight/2,scale:1};undoStack=[];redoStack=[];sel=null;refreshUndo();
   document.getElementById("jobName").textContent=S.job;updatePhotoMenu();
