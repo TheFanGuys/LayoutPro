@@ -62,6 +62,22 @@ canvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; d
 /* shared read-only view */
 body.shared #dock,body.shared #jobsBtn,body.shared #undoBtn,body.shared #redoBtn,body.shared #menuBtn,body.shared #scope{display:none!important;}
 body.shared #jobTap{pointer-events:none;}
+.mhead{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#7f8ba0;font-weight:800;margin:15px 2px 8px;}
+.mhead:first-of-type{margin-top:4px;}
+
+/* per-fan photos */
+.photostrip{display:flex;gap:8px;overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch;}
+.pthumb{flex:0 0 auto;width:66px;height:66px;border-radius:10px;background:#1a2230 center/cover no-repeat;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:#6b7a93;font-size:22px;cursor:pointer;}
+.pthumb.padd{border-style:dashed;color:#9fb0cd;font-size:30px;}
+#photoViewer{position:fixed;inset:0;z-index:60;background:rgba(8,10,14,.97);display:none;flex-direction:column;}
+#photoViewer.show{display:flex;}
+.pvbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;color:#cdd7e6;font-weight:700;}
+.pvbar button{background:#2b3950;border:0;color:#fff;padding:8px 14px;border-radius:8px;font:inherit;}
+.pvstage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.pvstage img{max-width:100%;max-height:100%;object-fit:contain;}
+.pvnav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.45);color:#fff;border:0;font-size:34px;width:46px;height:66px;border-radius:10px;}
+#pvPrev{left:8px;} #pvNext{right:8px;}
+.pvmeta{padding:12px 16px calc(env(safe-area-inset-bottom) + 12px);display:flex;flex-direction:column;gap:8px;background:var(--panel);border-top:1px solid var(--line);}
 
 /* bg adjust panel */
 #bgpanel{position:fixed; left:0; right:0; bottom:0; z-index:8; padding:12px 14px calc(env(safe-area-inset-bottom) + 12px);
@@ -163,13 +179,14 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <button class="tool active" data-tool="pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Move</button>
   <button class="tool" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
   <button class="tool" data-tool="wall"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12"/></svg>Wall</button>
-  <button class="tool" id="tPhoto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-9 8.5"/></svg>Photo</button>
-  <button class="tool" id="tRotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v5h-5"/></svg>Rotate</button>
+  <button class="tool" id="tPhoto" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-9 8.5"/></svg>Photo</button>
+  <button class="tool" id="tLayers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>Layers</button>
   <button class="tool" id="tFit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg>Fit</button>
 </div>
 
 <input type="file" id="photoInput" accept="image/*" style="display:none">
 <input type="file" id="restoreInput" accept="application/json,.json" style="display:none">
+<input type="file" id="jobImportInput" accept="application/json,.json,.lpjob" style="display:none">
 
 <div id="bgpanel">
   <div class="r"><label>Dim</label><input type="range" id="bgOpacity" min="20" max="100" value="100"></div>
@@ -221,6 +238,8 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <div class="field"><label>Spot in chain</label><input class="inp" id="fanChainPos" placeholder="#" inputmode="numeric"></div>
   </div>
   <div class="field"><label>Notes</label><textarea class="inp" id="fanNotes" placeholder="Needs FA wire, daisy chain to next bay, etc."></textarea></div>
+  <div class="field"><label>Photos</label><div class="photostrip" id="fanPhotos"></div></div>
+  <input type="file" id="fanPhotoInput" accept="image/*" style="display:none">
   <div class="field"><button class="btn" id="reloBtn">Set relocate spot →</button></div>
   <button class="btn primary" id="fanDone">Done</button>
 </div>
@@ -239,29 +258,51 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 <div class="sheet" id="menuSheet">
   <div class="grab"></div>
   <h3>Menu</h3>
+  <div class="mhead">Share &amp; export</div>
   <div class="field"><button class="btn primary" id="mShare">Share image</button></div>
-  <div class="field"><button class="btn primary" id="mShare">Share interactive link</button></div>
-  <div class="field"><button class="btn" id="mPdf">Export PDF / print</button></div>
-  <div class="field"><button class="btn" id="mCsv">Export fan schedule (CSV)</button></div>
-  <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
-  <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
-  <div class="field"><button class="btn" id="mBayGrid">Hide column grid</button></div>
-  <div class="field"><button class="btn" id="mTidy">Remove stray items…</button></div>
-  <div class="field"><button class="btn" id="mPhoto" style="display:none">Adjust photo</button></div>
-  <div class="field"><button class="btn" id="mBrands">Manage brands</button></div>
-  <div class="field"><button class="btn" id="mRename">Rename this job</button></div>
-  <div class="row">
-    <button class="btn" id="mBackup">Back up all</button>
-    <button class="btn" id="mRestore">Restore</button>
-  </div>
-  <div class="field" style="margin-top:14px;"><button class="btn danger" id="mClear">Clear this plan</button></div>
+  <div class="field"><button class="btn primary" id="mLink">Share interactive link</button></div>
+  <div class="row"><button class="btn" id="mJobSend">Send job + photos</button><button class="btn" id="mJobImport">Import job</button></div>
+  <div class="row"><button class="btn" id="mPdf">PDF / print</button><button class="btn" id="mCsv">Schedule (CSV)</button></div>
+  <div class="mhead">This job</div>
+  <div class="field"><button class="btn" id="mShell">Building shell / exterior…</button></div>
+  <div class="row"><button class="btn" id="mRename">Rename</button><button class="btn" id="mRotate">Rotate plan</button></div>
+  <div class="row"><button class="btn" id="mTidy">Remove strays…</button><button class="btn" id="mBrands">Brands</button></div>
+  <div class="field"><button class="btn danger" id="mClear">Clear this plan</button></div>
+  <button class="btn" id="mPhoto" style="display:none">Adjust photo</button>
+  <div class="mhead">All jobs (backup)</div>
+  <div class="row"><button class="btn" id="mBackup">Back up all</button><button class="btn" id="mRestore">Restore</button></div>
   <div class="legend">
     <span><span class="ring" style="border-color:var(--good)"></span>Has FA</span>
     <span><span class="ring" style="border-color:var(--bad)"></span>Needs FA</span>
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.20w · Share interactive link</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21e · Footprint tool</p>
+</div>
+
+<!-- Layers sheet -->
+<div class="scrim" id="layersScrim"></div>
+<div class="sheet" id="layersSheet">
+  <div class="grab"></div>
+  <h3>Layers &amp; view</h3>
+  <p class="hint">Toggle what shows on the plan.</p>
+  <div class="field"><button class="btn" id="mChains">Hide chain links</button></div>
+  <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
+  <div class="field"><button class="btn" id="mBayGrid">Hide column grid</button></div>
+  <button class="btn primary" id="layersDone">Done</button>
+</div>
+
+<!-- Building shell (exterior) sheet -->
+<div class="scrim" id="shellScrim"></div>
+<div class="sheet" id="shellSheet">
+  <div class="grab"></div>
+  <h3>Building shell (exterior)</h3>
+  <p class="hint">Build or change the outside walls of the building. Come back any time to add a wing or edit the outline.</p>
+  <div class="field"><button class="btn primary" id="addBuilding">Building from size (ft)…</button></div>
+  <div class="field"><button class="btn" id="shellTrace">Trace outline — walk the corners…</button></div>
+  <div class="field"><button class="btn" id="addAddress">Building from address…</button></div>
+  <div class="field"><button class="btn" id="shellDraw">Draw / edit walls by hand</button></div>
+  <button class="btn primary" id="shellDone">Done</button>
 </div>
 
 <!-- Add sheet -->
@@ -269,24 +310,32 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 <div class="sheet" id="addSheet">
   <div class="grab"></div>
   <h3>Add to plan</h3>
+  <div class="mhead">Fans</div>
   <div class="field"><button class="btn primary" id="addFan">Fan</button></div>
   <div class="field"><button class="btn" id="addGps">Walk &amp; drop (GPS)…</button></div>
-  <div class="field"><button class="btn" id="addWire">Wire — FA / comm…</button></div>
-  <div class="row">
-    <button class="btn" id="addFap">Fire-alarm panel</button>
-    <button class="btn" id="addController">Master controller</button>
-  </div>
-  <div class="field" style="margin-top:10px;"><button class="btn" id="addKeypad">Keypad</button></div>
+  <div class="mhead">Power &amp; control</div>
   <div class="row">
     <button class="btn" id="addPanel480">Panel 480V</button>
     <button class="btn" id="addPanel208">Panel 120/208V</button>
   </div>
-  <div class="field" style="margin-top:10px;"><button class="btn" id="addColumn">Column (structural)</button></div>
-  <div class="field"><button class="btn" id="addColGrid">Column grid (auto)…</button></div>
-  <div class="field"><button class="btn" id="addRack">Warehouse racking</button></div>
-  <div class="field"><button class="btn" id="addRoom">Room / area box</button></div>
-  <div class="field" style="margin-top:6px;border-top:1px solid var(--line);padding-top:14px;"><button class="btn" id="addBuilding">Building from size (ft)…</button></div>
-  <div class="field"><button class="btn" id="addAddress">Building from address…</button></div>
+  <div class="row">
+    <button class="btn" id="addFap">Fire-alarm panel</button>
+    <button class="btn" id="addController">Master controller</button>
+  </div>
+  <div class="field"><button class="btn" id="addKeypad">Keypad</button></div>
+  <div class="mhead">Wiring</div>
+  <div class="field"><button class="btn" id="addWire">FA / comm wire…</button></div>
+  <div class="mhead">Structure</div>
+  <div class="field"><button class="btn" id="addShell">Building shell / exterior…</button></div>
+  <div class="row">
+    <button class="btn" id="addRoom">Room</button>
+    <button class="btn" id="addWallTool">Wall</button>
+  </div>
+  <div class="row">
+    <button class="btn" id="addColumn">Column</button>
+    <button class="btn" id="addColGrid">Column grid…</button>
+  </div>
+  <div class="field"><button class="btn" id="addRack">Racking &amp; fills</button></div>
 </div>
 
 <!-- Column grid sheet -->
@@ -339,14 +388,17 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
 <div class="scrim" id="rackScrim"></div>
 <div class="sheet" id="rackSheet">
   <div class="grab"></div>
-  <h3>Warehouse racking</h3>
-  <p class="hint">Sizes are in feet (matches a building drawn from size). Defaults are typical back-to-back pallet racking with a forklift aisle.</p>
+  <h3>Area fill</h3>
+  <p class="hint">Choose how this rectangle is drawn. Sizes are in feet.</p>
+  <div class="field"><label>Fill type</label><div class="seg" id="rkFill"></div></div>
+  <div id="rkRackOnly">
   <div class="field"><label>Row direction</label><div class="seg" id="rkDir"></div></div>
   <div class="row">
     <div class="field"><label>Rack depth (ft)</label><input class="inp" id="rkDepth" inputmode="decimal"></div>
     <div class="field"><label>Aisle (ft)</label><input class="inp" id="rkAisle" inputmode="decimal"></div>
   </div>
   <div class="field"><label>Bay width (ft)</label><input class="inp" id="rkBay" inputmode="decimal"></div>
+  </div>
   <div class="row">
     <button class="btn danger" id="rkDelete">Delete</button>
     <button class="btn primary" id="rkDone">Done</button>
@@ -370,12 +422,20 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <input class="inp" id="modalInput" style="display:none">
     <div class="mrow">
       <button class="btn" id="modalCancel">Cancel</button>
+      <button class="btn" id="modalCopy" style="display:none">Copy</button>
+      <button class="btn" id="modalShare" style="display:none">Share…</button>
       <button class="btn primary" id="modalOk">OK</button>
     </div>
   </div>
 </div>
 
 <div id="printArea"></div>
+
+<div id="photoViewer">
+  <div class="pvbar"><span id="pvCount"></span><button id="pvClose">Close</button></div>
+  <div class="pvstage"><button class="pvnav" id="pvPrev">‹</button><img id="pvImg" alt=""><button class="pvnav" id="pvNext">›</button></div>
+  <div class="pvmeta"><div class="seg" id="pvLabel"></div><input class="inp" id="pvCap" placeholder="Caption (optional)"><button class="btn danger" id="pvDel">Delete photo</button></div>
+</div>
 
 <script>
 "use strict";
@@ -395,6 +455,7 @@ let S=blankState();
 let bgImg=null;
 let view={x:0,y:0,scale:1};
 let tool="pan";
+let orthoWall=false;
 let activeBrand=0;
 let pending=null;          // {type:'room'|'wall', p1} | {type:'relocate', id}
 let editId=null;           // fan currently in edit sheet
@@ -429,7 +490,9 @@ function clone(o){return JSON.parse(JSON.stringify(o));}
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
 /* ---------- in-app dialogs (work where native popups are blocked) ---------- */
 let modalCb=null;
+function hideLinkBtns(){document.getElementById("modalCopy").style.display="none";document.getElementById("modalShare").style.display="none";document.getElementById("modalInput").readOnly=false;}
 function uiConfirm(msg,onYes,okLabel){
+  hideLinkBtns();
   document.getElementById("modalTitle").textContent=msg;
   document.getElementById("modalInput").style.display="none";
   document.getElementById("modalCancel").style.display="";
@@ -438,6 +501,7 @@ function uiConfirm(msg,onYes,okLabel){
   document.getElementById("modal").classList.add("show");
 }
 function uiPrompt(title,initial,onOk){
+  hideLinkBtns();
   document.getElementById("modalTitle").textContent=title;
   const inp=document.getElementById("modalInput"); inp.style.display=""; inp.value=initial||"";
   document.getElementById("modalCancel").style.display="";
@@ -446,6 +510,7 @@ function uiPrompt(title,initial,onOk){
   document.getElementById("modal").classList.add("show"); setTimeout(()=>inp.focus(),60);
 }
 function uiAlert(msg,onClose){
+  hideLinkBtns();
   document.getElementById("modalTitle").textContent=msg;
   document.getElementById("modalInput").style.display="none";
   document.getElementById("modalCancel").style.display="none";
@@ -453,9 +518,26 @@ function uiAlert(msg,onClose){
   modalCb=()=>{if(onClose)onClose();};
   document.getElementById("modal").classList.add("show");
 }
+function uiLink(title,url){
+  document.getElementById("modalTitle").textContent=title;
+  const inp=document.getElementById("modalInput"); inp.style.display=""; inp.value=url; inp.readOnly=true;
+  document.getElementById("modalCancel").style.display="none";
+  const copy=document.getElementById("modalCopy"); copy.style.display=""; copy.textContent="Copy";
+  document.getElementById("modalShare").style.display=(navigator.share?"":"none");
+  document.getElementById("modalOk").textContent="Done";
+  modalCb=null;
+  document.getElementById("modal").classList.add("show");
+  setTimeout(()=>{try{inp.focus();inp.setSelectionRange(0,99999);}catch(e){}},60);
+}
+function copyText(t){
+  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t);
+  return new Promise((res,rej)=>{try{const i=document.getElementById("modalInput");i.readOnly=false;i.focus();i.select();i.setSelectionRange(0,99999);const ok=document.execCommand("copy");i.readOnly=true;ok?res():rej();}catch(e){rej(e);}});
+}
 function closeModal(ok){document.getElementById("modal").classList.remove("show");const cb=modalCb;modalCb=null;if(cb)cb(ok);}
 document.getElementById("modalOk").addEventListener("click",()=>closeModal(true));
 document.getElementById("modalCancel").addEventListener("click",()=>closeModal(false));
+document.getElementById("modalCopy").addEventListener("click",()=>{const b=document.getElementById("modalCopy");copyText(document.getElementById("modalInput").value).then(()=>{b.textContent="Copied!";setTimeout(()=>{b.textContent="Copy";},1400);}).catch(()=>{b.textContent="Press & hold to copy";});});
+document.getElementById("modalShare").addEventListener("click",()=>{const url=document.getElementById("modalInput").value;if(navigator.share)navigator.share({title:"Fan Layout",url}).catch(()=>{});});
 
 /* ---------- history ---------- */
 function snap(){return clone({rooms:S.rooms,walls:S.walls,fans:S.fans,columns:S.columns,racking:S.racking,devices:S.devices,links:S.links,brands:S.brands,nextNum:S.nextNum,bg:S.bg});}
@@ -536,7 +618,7 @@ function wallEndHit(w,sx,sy){
   if(Math.hypot(sx-c,sy-d)<=16)return 2;
   return 0;
 }
-function selObj(){if(!sel)return null;const a=S[sel.kind+"s"];return a.find(o=>o.id===sel.id)||null;}
+function selObj(){if(!sel)return null;const a=(sel.kind==="rack")?S.racking:S[sel.kind+"s"];return a?(a.find(o=>o.id===sel.id)||null):null;}
 function chainGroups(){
   const m={};
   S.fans.forEach(f=>{const k=(f.chain||"").trim(); if(!k)return; (m[k]=m[k]||[]).push(f);});
@@ -616,6 +698,84 @@ function strokeWireAround(c,ax,ay,bx,by,obs){
   c.lineTo(bx,by);c.stroke();
   }catch(e){ c.beginPath();c.moveTo(ax,ay);c.lineTo(bx,by);c.stroke(); }
 }
+function fillConveyor(c,rw,rh,u,dpr){
+  const horiz=rw>=rh, m=Math.min(rw,rh)*0.20;
+  c.fillStyle="rgba(150,170,200,.16)"; c.strokeStyle="rgba(190,205,230,.55)";
+  if(horiz){
+    const y0=-rh/2+m,y1=rh/2-m;
+    c.fillRect(-rw/2,y0,rw,y1-y0); c.lineWidth=1.6*dpr; c.strokeRect(-rw/2+1,y0,rw-2,y1-y0);
+    const step=Math.max(7,3*u); c.lineWidth=1*dpr; c.strokeStyle="rgba(190,205,230,.4)";
+    for(let x=-rw/2+step;x<rw/2;x+=step){c.beginPath();c.moveTo(x,y0+2);c.lineTo(x,y1-2);c.stroke();}
+    const cy=(y0+y1)/2,s=(y1-y0)*0.32,ch=Math.max(11,6*u);
+    c.strokeStyle="rgba(90,205,140,.9)"; c.lineWidth=Math.max(2.4,2*dpr); c.lineJoin="round";
+    for(let x=-rw/2+ch;x<rw/2-ch*0.6;x+=ch*1.5){c.beginPath();c.moveTo(x,cy-s);c.lineTo(x+ch*0.55,cy);c.lineTo(x,cy+s);c.stroke();}
+  } else {
+    const x0=-rw/2+m,x1=rw/2-m;
+    c.fillRect(x0,-rh/2,x1-x0,rh); c.lineWidth=1.6*dpr; c.strokeRect(x0,-rh/2+1,x1-x0,rh-2);
+    const step=Math.max(7,3*u); c.lineWidth=1*dpr; c.strokeStyle="rgba(190,205,230,.4)";
+    for(let y=-rh/2+step;y<rh/2;y+=step){c.beginPath();c.moveTo(x0+2,y);c.lineTo(x1-2,y);c.stroke();}
+    const cx=(x0+x1)/2,s=(x1-x0)*0.32,ch=Math.max(11,6*u);
+    c.strokeStyle="rgba(90,205,140,.9)"; c.lineWidth=Math.max(2.4,2*dpr); c.lineJoin="round";
+    for(let y=-rh/2+ch;y<rh/2-ch*0.6;y+=ch*1.5){c.beginPath();c.moveTo(cx-s,y);c.lineTo(cx,y+ch*0.55);c.lineTo(cx+s,y);c.stroke();}
+  }
+}
+function mBox(c,x,y,w,h,f,dpr){c.fillStyle=f;c.fillRect(x,y,w,h);c.strokeStyle="rgba(205,218,242,.7)";c.lineWidth=1.2*dpr;c.strokeRect(x,y,w,h);}
+function mPress(c,x,y,w,h,dpr){const S="rgba(180,195,215,.30)",D="rgba(150,165,190,.55)",Wn="rgba(230,238,250,.12)";
+  mBox(c,x+w*0.16,y+h*0.78,w*0.68,h*0.12,D,dpr); mBox(c,x+w*0.24,y+h*0.22,w*0.08,h*0.58,S,dpr); mBox(c,x+w*0.68,y+h*0.22,w*0.08,h*0.58,S,dpr);
+  mBox(c,x+w*0.16,y+h*0.12,w*0.68,h*0.14,D,dpr); mBox(c,x+w*0.42,y+h*0.26,w*0.16,h*0.29,S,dpr); mBox(c,x+w*0.30,y+h*0.60,w*0.40,h*0.10,Wn,dpr);}
+function mLathe(c,x,y,w,h,dpr){const S="rgba(180,195,215,.30)",D="rgba(150,165,190,.55)",Wn="rgba(230,238,250,.12)";
+  mBox(c,x+w*0.1,y+h*0.5,w*0.8,h*0.16,S,dpr); mBox(c,x+w*0.1,y+h*0.3,w*0.2,h*0.36,D,dpr);
+  c.beginPath();c.arc(x+w*0.3,y+h*0.42,h*0.09,0,7);c.fillStyle=Wn;c.fill();c.strokeStyle="rgba(205,218,242,.7)";c.lineWidth=1.2*dpr;c.stroke();
+  c.beginPath();c.moveTo(x+w*0.3,y+h*0.42);c.lineTo(x+w*0.74,y+h*0.42);c.lineWidth=2.4*dpr;c.stroke();
+  mBox(c,x+w*0.74,y+h*0.34,w*0.14,h*0.16,D,dpr); mBox(c,x+w*0.16,y+h*0.66,w*0.08,h*0.18,D,dpr); mBox(c,x+w*0.74,y+h*0.66,w*0.08,h*0.18,D,dpr);}
+function mCnc(c,x,y,w,h,dpr){const S="rgba(180,195,215,.30)",D="rgba(150,165,190,.55)",Wn="rgba(230,238,250,.12)";
+  roundRect(c,x+w*0.12,y+h*0.14,w*0.66,h*0.72,5*dpr);c.fillStyle=S;c.fill();c.strokeStyle="rgba(205,218,242,.7)";c.lineWidth=1.2*dpr;c.stroke();
+  roundRect(c,x+w*0.2,y+h*0.24,w*0.42,h*0.38,4*dpr);c.fillStyle=Wn;c.fill();c.stroke();
+  mBox(c,x+w*0.78,y+h*0.3,w*0.12,h*0.4,D,dpr);
+  c.fillStyle="rgba(120,205,160,.85)";for(let i=0;i<3;i++){c.beginPath();c.arc(x+w*0.84,y+h*(0.40+i*0.1),2.2*dpr,0,7);c.fill();}}
+function fillProduction(c,rw,rh,u,dpr){
+  const target=22*u; let cols=Math.max(1,Math.round(rw/target)), rows=Math.max(1,Math.round(rh/target));
+  cols=Math.min(cols,14); rows=Math.min(rows,14);
+  const cw=rw/cols, chh=rh/rows, types=[mPress,mLathe,mCnc]; let k=0;
+  for(let r=0;r<rows;r++)for(let col=0;col<cols;col++){
+    const x=-rw/2+col*cw, y=-rh/2+r*chh, mx=cw*0.16, my=chh*0.16;
+    types[k%3](c,x+mx,y+my,cw-2*mx,chh-2*my,dpr); k++;
+  }
+}
+function fillOffice(c,rw,rh,u,dpr){
+  const L=-rw/2,T=-rh/2,W=rw,H=rh;
+  const ROOM="rgba(120,150,205,.10)",ST="rgba(150,175,225,.55)",DESK="rgba(210,180,130,.5)",DST="rgba(225,195,150,.75)",CH="rgba(200,210,228,.6)",COR="rgba(255,255,255,.05)",TBL="rgba(220,228,245,.14)";
+  const pad=Math.min(W,H)*0.04, ix=L+pad,iy=T+pad,iw=W-2*pad,ih=H-2*pad;
+  const cY0=iy+ih*0.44,cH=ih*0.12,cY1=cY0+cH;
+  const ch_r=Math.max(2.2*dpr,1.3*u), dw=Math.max(8*dpr,3.4*u);
+  function room(x,y,w,h){c.fillStyle=ROOM;c.fillRect(x,y,w,h);c.strokeStyle=ST;c.lineWidth=1.4*dpr;c.strokeRect(x,y,w,h);}
+  function desk(x,y,w,h){c.fillStyle=DESK;c.fillRect(x,y,w,h);c.strokeStyle=DST;c.lineWidth=1.2*dpr;c.strokeRect(x,y,w,h);}
+  function chair(cx,cy){c.beginPath();c.arc(cx,cy,ch_r,0,7);c.strokeStyle=CH;c.lineWidth=1.5*dpr;c.stroke();}
+  function doorUp(cx,wy){c.strokeStyle="rgba(150,175,225,.55)";c.lineWidth=1.2*dpr;c.beginPath();c.arc(cx-dw/2,wy,dw,-Math.PI/2,0);c.stroke();}
+  c.fillStyle=COR;c.fillRect(ix,cY0,iw,cH);
+  const n=3,cw=iw/n;
+  for(let i=0;i<n;i++){const ox=ix+i*cw, oh=cY0-iy; room(ox,iy,cw,oh);
+    desk(ox+cw*0.1,iy+pad,cw*0.42,oh*0.26); chair(ox+cw*0.31,iy+pad+oh*0.26+ch_r+2); doorUp(ox+cw*0.5,cY0);}
+  const bw=iw/3, by=cY1, bh=iy+ih-cY1;
+  room(ix,by,bw,bh);
+  c.fillStyle="rgba(200,210,228,.16)";c.fillRect(ix+pad,by+pad,bw-2*pad,Math.max(3,bh*0.13));c.strokeStyle=DST;c.lineWidth=1*dpr;c.strokeRect(ix+pad,by+pad,bw-2*pad,Math.max(3,bh*0.13));
+  c.fillStyle=DESK;c.fillRect(ix+pad,by+pad,bw*0.12,bh*0.24);c.strokeRect(ix+pad,by+pad,bw*0.12,bh*0.24);
+  const tx=ix+bw*0.52,ty=by+bh*0.64;
+  c.fillStyle=TBL;c.fillRect(tx-bw*0.15,ty-bh*0.1,bw*0.3,bh*0.2);c.strokeStyle=DST;c.lineWidth=1.2*dpr;c.strokeRect(tx-bw*0.15,ty-bh*0.1,bw*0.3,bh*0.2);
+  chair(tx-bw*0.15-ch_r-2,ty);chair(tx+bw*0.15+ch_r+2,ty);chair(tx,ty-bh*0.1-ch_r-2);chair(tx,ty+bh*0.1+ch_r+2);
+  doorUp(ix+bw*0.5,cY1);
+  const cx0=ix+bw; room(cx0,by,bw,bh);
+  c.save();c.translate(cx0+bw*0.5,by+bh*0.52);c.scale(bw*0.26,bh*0.30);c.beginPath();c.arc(0,0,1,0,7);c.restore();
+  c.fillStyle=TBL;c.fill();c.strokeStyle=DST;c.lineWidth=1.6*dpr;c.stroke();
+  for(let i=0;i<3;i++){const xp=cx0+bw*0.5-bw*0.18+i*bw*0.18;chair(xp,by+bh*0.52-bh*0.30-ch_r-2);chair(xp,by+bh*0.52+bh*0.30+ch_r+2);}
+  doorUp(cx0+bw*0.5,cY1);
+  const qx=ix+2*bw; room(qx,by,bw,bh);
+  const aisle=bw*0.08, gw=(bw-aisle*3)/2, gh=(bh-aisle*2.4)/2, gy0=by+aisle*1.4;
+  for(let r=0;r<2;r++)for(let cc=0;cc<2;cc++){const ox=qx+aisle+(gw+aisle)*cc, oy=gy0+(gh+aisle*0.6)*r;
+    c.strokeStyle="rgba(150,175,225,.4)";c.lineWidth=1*dpr;c.strokeRect(ox,oy,gw,gh);
+    desk(ox+gw*0.12,oy+gh*0.12,gw*0.55,gh*0.3); chair(ox+gw*0.5,oy+gh*0.72);}
+  doorUp(qx+bw*0.5,cY1);
+}
 function drawScene(c, tx, fanR, dpr, live){
   const W=c.canvas.width,H=c.canvas.height;
   const u=tx.scale*dpr;                       // world->device unit
@@ -665,6 +825,11 @@ function drawScene(c, tx, fanR, dpr, live){
     const drawBays=(horiz?rw:rh)/bay<=400;
     c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
     c.beginPath(); c.rect(-rw/2,-rh/2,rw,rh); c.clip();
+    const fillType=r.fill||"rack";
+    if(fillType==="conveyor"){fillConveyor(c,rw,rh,u,dpr);}
+    else if(fillType==="office"){fillOffice(c,rw,rh,u,dpr);}
+    else if(fillType==="production"){fillProduction(c,rw,rh,u,dpr);}
+    else{
     let guard=0;
     if(horiz){
       for(let yy=-rh/2; yy<rh/2+period && guard<400; yy+=period, guard++){
@@ -684,6 +849,7 @@ function drawScene(c, tx, fanR, dpr, live){
         if(drawBays){c.strokeStyle="rgba(210,225,250,.55)"; c.lineWidth=1*dpr;
           for(let yy=-rh/2; yy<=rh/2; yy+=bay){c.beginPath();c.moveTo(xx,yy);c.lineTo(xx+depth,yy);c.stroke();}}
       }
+    }
     }
     c.restore();
     c.save(); c.translate(sc[0],sc[1]); c.rotate(rot);
@@ -833,6 +999,7 @@ function drawScene(c, tx, fanR, dpr, live){
       c.moveTo(x+fanR*.75,y-fanR*.75);c.lineTo(x-fanR*.75,y+fanR*.75);c.stroke();}
     // control-type tick (small letter, bottom-right) when set
     if(f.control){const ab=ctrlAbbr(f.control); if(ab)miniBadge(c,x+fanR*0.9,y+fanR*0.9,ab,"#1F2633",dpr,true);}
+    if(f.photos&&f.photos.length)miniBadge(c,x-fanR*0.9,y-fanR*0.9,String(f.photos.length),"#0EA5A4",dpr);
     // selection / wire-source halo
     if(live&&((sel&&sel.kind==="fan"&&sel.id===f.id)||(wireFrom&&wireFrom.kind==="fan"&&wireFrom.id===f.id))){c.strokeStyle="#FF7A1A";c.lineWidth=2.5*dpr;
       c.beginPath();c.arc(x,y,fanR+9*dpr,0,7);c.stroke();}
@@ -1027,6 +1194,7 @@ function handleTap(sx,sy){
     let closing=false;
     if(pending.pts.length>=2){const[s0x,s0y]=w2s(pending.pts[0][0],pending.pts[0][1]);
       if(Math.hypot(sx-s0x,sy-s0y)<=14){pt=pending.pts[0];closing=true;}}
+    if(orthoWall&&!closing){const l0=pending.pts[pending.pts.length-1];const dx=pt[0]-l0[0],dy=pt[1]-l0[1];if(Math.abs(dx)>=Math.abs(dy))pt=[pt[0],l0[1]];else pt=[l0[0],pt[1]];}
     pushHistory();
     const last=pending.pts[pending.pts.length-1];
     S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:pt[0],y2:pt[1]});
@@ -1076,9 +1244,38 @@ function renderHintBar(){
 function renderWallBar(){
   ctxInner.innerHTML="";
   const active=pending&&pending.type==="wallchain";
+  if(orthoWall){
+    hintSpan(active?"Tap corners (snaps square), or type ft + a direction":"Tap first corner, or type ft + a direction");
+    const inp=document.createElement("input");inp.id="wallFt";inp.className="inp";inp.placeholder="ft";inp.setAttribute("inputmode","decimal");
+    inp.style.cssText="width:62px;flex:0 0 auto;text-align:center;";ctxInner.appendChild(inp);
+    [["→",1,0],["↑",0,-1],["↓",0,1],["←",-1,0]].forEach(([lbl,dx,dy])=>{const b=document.createElement("button");b.className="cbtn";b.style.cssText="flex:0 0 auto;min-width:40px;font-size:18px;";b.textContent=lbl;b.onclick=()=>addOrthoSegment(dx,dy);ctxInner.appendChild(b);});
+    if(active){mkBtn("Undo pt","",()=>undoChainPt());mkBtn("Close","primary",()=>closeChain());}
+    mkBtn("Done","",()=>setTool("pan"));
+    return;
+  }
   hintSpan(active?"Tap each corner · tap the start to close":"Tap to start the wall");
   if(active)mkBtn("Finish","primary",()=>{pending=null;refreshCtx();render();});
   mkBtn("Done","",()=>setTool("pan"));
+}
+function addOrthoSegment(dx,dy){
+  const el=document.getElementById("wallFt");const ft=el?parseFloat(el.value):NaN;
+  if(!(ft>0)){showBanner("Type a length in feet first.");return;}
+  if(!pending||pending.type!=="wallchain"||!pending.pts.length){
+    const cc=s2w(innerWidth/2,innerHeight/2);pending={type:"wallchain",pts:[[Math.round(cc[0]),Math.round(cc[1])]]};
+  }
+  const last=pending.pts[pending.pts.length-1];const np=[last[0]+dx*ft,last[1]+dy*ft];
+  pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:np[0],y2:np[1]});
+  pending.pts.push(np);refreshCtx();render();fitAll();
+}
+function undoChainPt(){
+  if(!pending||pending.type!=="wallchain"||pending.pts.length<2)return;
+  pending.pts.pop();S.walls.pop();refreshCtx();render();
+}
+function closeChain(){
+  if(!pending||pending.type!=="wallchain"||pending.pts.length<3){showBanner("Drop at least 3 corners first.");return;}
+  const last=pending.pts[pending.pts.length-1],first=pending.pts[0];
+  if(last[0]!==first[0]||last[1]!==first[1]){pushHistory();S.walls.push({id:uid(),x1:last[0],y1:last[1],x2:first[0],y2:first[1]});}
+  pending=null;refreshCtx();render();fitAll();
 }
 function renderWireBar(){
   ctxInner.innerHTML="";
@@ -1105,7 +1302,7 @@ function renderSelBar(){
     hintSpan(wr.label+": "+nodeName(o.a)+" ↔ "+nodeName(o.b));
     mkBtn("Delete","danger",()=>{pushHistory();S.links=S.links.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="rack"){
-    hintSpan("Racking · drag to move");
+    hintSpan(({rack:"Racking",conveyor:"Conveyor",office:"Office",production:"Production"}[o.fill||"rack"])+" · drag to move");
     mkBtn("Edit","",()=>openRack(o));
     mkBtn("Delete","danger",()=>{pushHistory();S.racking=S.racking.filter(x=>x.id!==o.id);sel=null;refreshCtx();render();updateScope();});
   } else if(sel.kind==="room"){
@@ -1122,6 +1319,11 @@ function startWireFrom(ref){sel=null;setTool("wire");wireFrom=ref;refreshCtx();r
 function editDevice(d){uiPrompt("Device label",d.label||"",v=>{pushHistory();d.label=v||DEV[d.type].code;render();scheduleSave();});}
 function openRack(r){
   sel={kind:"rack",id:r.id};refreshCtx();render();
+  const FILLOPTS=[["Racking","rack"],["Conveyor","conveyor"],["Office","office"]];
+  const curFill=r.fill||"rack";
+  const toggleRackOnly=f=>{document.getElementById("rkRackOnly").style.display=(f==="rack")?"":"none";};
+  buildSeg("rkFill",FILLOPTS.map(o=>o[0]),(FILLOPTS.find(o=>o[1]===curFill)||FILLOPTS[0])[0],v=>{pushHistory();const f=(FILLOPTS.find(o=>o[0]===v)||FILLOPTS[0])[1];r.fill=f;toggleRackOnly(f);render();scheduleSave();});
+  toggleRackOnly(curFill);
   buildSeg("rkDir",["Rows ↔","Rows ↕"], (r.dir||"h")==="h"?"Rows ↔":"Rows ↕", v=>{pushHistory();r.dir=(v==="Rows ↔")?"h":"v";render();scheduleSave();});
   const bindR=(id,key)=>{const el=document.getElementById(id);el.value=r[key];el.oninput=()=>{const n=parseFloat(el.value);if(n>0){r[key]=n;render();scheduleSave();}};};
   bindR("rkDepth","depth");bindR("rkAisle","aisle");bindR("rkBay","bay");
@@ -1133,7 +1335,7 @@ function mkBtn(t,cls,cb){const b=document.createElement("button");b.className="c
 
 /* ---------- tools ---------- */
 document.querySelectorAll(".tool[data-tool]").forEach(b=>b.addEventListener("click",()=>setTool(b.dataset.tool)));
-function setTool(t){tool=t;pending=null;wireFrom=null;hideBanner();if(t!=="pan")sel=null;
+function setTool(t){tool=t;pending=null;wireFrom=null;hideBanner();if(t!=="pan")sel=null;if(t!=="wall")orthoWall=false;
   document.querySelectorAll(".tool").forEach(x=>x.classList.remove("active"));
   let el=document.querySelector(`.tool[data-tool="${t}"]`);
   if(!el && ["fan","column","room","rack","fap","controller","keypad","panel480","panel208","wire"].includes(t)) el=document.getElementById("addBtn");
@@ -1188,7 +1390,7 @@ document.getElementById("gpsDrop").addEventListener("click",gpsDrop);
 document.getElementById("gpsDone").addEventListener("click",()=>{stopGPS();fitAll();});
 document.getElementById("gpsReset").addEventListener("click",()=>{gpsRef=null;uiAlert("Origin reset — the next drop starts a fresh map.");});
 /* ---------- building from address (OpenStreetMap) ---------- */
-document.getElementById("addAddress").addEventListener("click",()=>{closeSheet("add");document.getElementById("addrStatus").textContent="";openSheet("addr");});
+document.getElementById("addAddress").addEventListener("click",()=>{closeSheet("shell");document.getElementById("addrStatus").textContent="";openSheet("addr");});
 document.getElementById("addrFind").addEventListener("click",findBuildingByAddress);
 document.getElementById("addrClear").addEventListener("click",()=>{const el=document.getElementById("addrInput");el.value="";setAddrStatus("");el.focus();});
 /* ---------- rotate plan ---------- */
@@ -1210,7 +1412,15 @@ function rotatePlan(deg){
   render();
 }
 function openRotate(){rotSession=0;rotLast=0;document.getElementById("rotSlider").value=0;pushHistory();document.getElementById("rotpanel").classList.add("show");}
-document.getElementById("tRotate").addEventListener("click",()=>openRotate());
+document.getElementById("tLayers").addEventListener("click",()=>openSheet("layers"));
+document.getElementById("layersDone").addEventListener("click",()=>closeSheet("layers"));
+document.getElementById("mRotate").addEventListener("click",()=>{closeSheet("menu");openRotate();});
+document.getElementById("addShell").addEventListener("click",()=>{closeSheet("add");openSheet("shell");});
+document.getElementById("mShell").addEventListener("click",()=>{closeSheet("menu");openSheet("shell");});
+document.getElementById("shellDone").addEventListener("click",()=>closeSheet("shell"));
+document.getElementById("shellTrace").addEventListener("click",()=>{closeSheet("shell");orthoWall=true;setTool("wall");showBanner("Walk the perimeter: tap each corner (it snaps square), or type feet + a ▸ direction. Tap the start dot to close.");});
+document.getElementById("shellDraw").addEventListener("click",()=>{closeSheet("shell");orthoWall=false;setTool("wall");showBanner("Tap to drop wall corners. Tap the first dot to close the shape.");});
+document.getElementById("addWallTool").addEventListener("click",()=>{closeSheet("add");setTool("wall");});
 document.getElementById("rotSlider").addEventListener("input",e=>{const v=parseFloat(e.target.value);rotatePlan(v-rotLast);rotSession+=(v-rotLast);rotLast=v;});
 document.getElementById("rotL90").addEventListener("click",()=>{rotatePlan(-90);rotSession-=90;});
 document.getElementById("rotR90").addEventListener("click",()=>{rotatePlan(90);rotSession+=90;});
@@ -1275,7 +1485,7 @@ document.getElementById("addColGrid").addEventListener("click",()=>{closeSheet("
 document.getElementById("addColumn").addEventListener("click",()=>{closeSheet("add");setTool("column");});
 document.getElementById("addRack").addEventListener("click",()=>{closeSheet("add");setTool("rack");});
 document.getElementById("addRoom").addEventListener("click",()=>{closeSheet("add");setTool("room");});
-document.getElementById("addBuilding").addEventListener("click",()=>{closeSheet("add");openBuilding();});
+document.getElementById("addBuilding").addEventListener("click",()=>{closeSheet("shell");openBuilding();});
 document.getElementById("bldCreate").addEventListener("click",createBuilding);
 function openBuilding(){
   const wEl=document.getElementById("bldW"),lEl=document.getElementById("bldL");
@@ -1346,6 +1556,7 @@ function openFan(f){
   buildChips("voltChips",VOLTS,()=>f.volt,v=>{f.volt=v;document.getElementById("fanVolt").value=v;scheduleSave();});
   buildChips("ctrlChips",CTRLS,()=>f.control,v=>{f.control=v;document.getElementById("fanCtrl").value=v;render();scheduleSave();});
   document.getElementById("reloBtn").onclick=()=>{closeSheet("fan");pending={type:"relocate",id:f.id};showBanner("Tap the new spot for fan #"+(f.label||""));render();};
+  renderFanPhotos(f);
   document.getElementById("fanDone").onclick=()=>{closeSheet("fan");};
   openSheet("fan");
 }
@@ -1363,7 +1574,7 @@ function buildSeg(id,opts,cur,cb){const el=document.getElementById(id);el.innerH
 /* ---------- sheets ---------- */
 function openSheet(n){document.getElementById(n+"Scrim").classList.add("show");document.getElementById(n+"Sheet").classList.add("show");}
 function closeSheet(n){document.getElementById(n+"Scrim").classList.remove("show");document.getElementById(n+"Sheet").classList.remove("show");}
-["fan","jobs","menu","brand","add","building","addr","cgrid","rack"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
+["fan","jobs","menu","brand","add","building","addr","cgrid","rack","layers","shell"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
 function showBanner(t){const b=document.getElementById("banner");b.textContent=t;b.style.display="block";}
 function hideBanner(){document.getElementById("banner").style.display="none";}
 
@@ -1484,7 +1695,7 @@ function loadSnap(s){
   document.getElementById("jobName").textContent=S.job;updatePhotoMenu();
   loadBg(()=>render());render();updateScope();refreshFanSwatch();refreshCtx();
 }
-function updatePhotoMenu(){document.getElementById("mPhoto").style.display=S.bg?"block":"none";}
+function updatePhotoMenu(){document.getElementById("mPhoto").style.display="none";}
 
 /* ---------- jobs ---------- */
 document.getElementById("jobsBtn").addEventListener("click",()=>{renderJobs();openSheet("jobs");});
@@ -1504,7 +1715,7 @@ document.getElementById("newJob").addEventListener("click",()=>{
     if(!nm)return;
     saveAll();S=blankState();S.job=nm;bgImg=null;undoStack=[];redoStack=[];sel=null;refreshUndo();
     view={x:innerWidth/2,y:innerHeight/2,scale:1};document.getElementById("jobName").textContent=nm;
-    updatePhotoMenu();render();updateScope();refreshCtx();saveAll();closeSheet("jobs");});
+    updatePhotoMenu();render();updateScope();refreshCtx();saveAll();closeSheet("jobs");openSheet("shell");});
 });
 
 /* ---------- menu ---------- */
@@ -1520,7 +1731,7 @@ document.getElementById("mClear").addEventListener("click",()=>{closeSheet("menu
 document.getElementById("mShare").addEventListener("click",()=>{closeSheet("menu");sharePNG();});
 document.getElementById("mPdf").addEventListener("click",()=>{closeSheet("menu");exportPDF();});
 document.getElementById("mCsv").addEventListener("click",()=>{closeSheet("menu");exportCSV();});
-document.getElementById("mShare").addEventListener("click",()=>{closeSheet("menu");buildShareLink();});
+document.getElementById("mLink").addEventListener("click",()=>{closeSheet("menu");buildShareLink();});
 function svgScene(){
   const b=planBounds(); if(!b)return null;
   const pad=Math.max(20,(b.maxx-b.minx)*0.04);
@@ -1674,9 +1885,7 @@ function buildShareLink(){
     let b64=btoa(unescape(encodeURIComponent(data))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
     const url=location.origin+location.pathname+'#v='+b64;
     if(url.length>200000){uiAlert("This plan is too big to share as a link. Use 'Remove stray items' or split the job, then try again.");return;}
-    if(navigator.share){navigator.share({title:(S.job||'Fan Layout')+' — Layout',url}).catch(()=>{});}
-    else if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>uiAlert("Interactive link copied. Paste it into a text or email."),()=>uiAlert(url));}
-    else uiAlert(url);
+    uiLink("Interactive link — Copy or Share it",url);
   }catch(e){uiAlert("Couldn't build the link.");}
 }
 document.getElementById("mChains").addEventListener("click",()=>{showChains=!showChains;
@@ -1951,23 +2160,123 @@ function exportCSV(){
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
 }
 /* ---------- backup / restore ---------- */
+function collectPhotos(fans){
+  const ids=new Set();(fans||[]).forEach(f=>(f.photos||[]).forEach(p=>{if(p&&p.id)ids.add(p.id);}));
+  const out={};
+  return Promise.all([...ids].map(id=>idbGet(id).then(d=>{if(d)out[id]=d;}).catch(()=>{}))).then(()=>out);
+}
+function writePhotos(photos){const ids=Object.keys(photos||{});return Promise.all(ids.map(id=>idbPut(id,photos[id]).catch(()=>{}))).then(()=>{});}
+function allFansInStore(store){const a=[];Object.keys(store.jobs||{}).forEach(k=>{(store.jobs[k].fans||[]).forEach(f=>a.push(f));});return a;}
+function shareJobFile(){
+  saveAll();const job=snapshot();
+  collectPhotos(job.fans||[]).then(photos=>{
+    const data=JSON.stringify({type:"layoutpro-job",v:1,job:job,photos:photos});
+    shareFile(data,"application/json",".lpjob.json");
+  }).catch(()=>uiAlert("Couldn't build the job file."));
+}
+function importJobFile(file){
+  const fr=new FileReader();
+  fr.onload=()=>{try{const d=JSON.parse(fr.result);
+    if(!(d&&d.type==="layoutpro-job"&&d.job))throw 0;
+    const job=d.job, photos=d.photos||{};
+    writePhotos(photos).then(()=>{
+      const st=readStore();let nm=job.job||"Imported job";
+      if(st.jobs[nm]){let i=2;while(st.jobs[nm+" ("+i+")"])i++;nm=nm+" ("+i+")";}
+      job.job=nm;st.jobs[nm]=job;st.current=nm;writeStore(st);
+      loadSnap(job);fitAll();render();updateScope();refreshCtx();
+      uiAlert("Imported \""+nm+"\" with its photos.");
+    });
+  }catch(err){uiAlert("That isn't a LayoutPro job file.");}};
+  fr.readAsText(file);
+}
+document.getElementById("mJobSend").addEventListener("click",()=>{closeSheet("menu");shareJobFile();});
+document.getElementById("mJobImport").addEventListener("click",()=>{closeSheet("menu");document.getElementById("jobImportInput").click();});
+document.getElementById("jobImportInput").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(f)importJobFile(f);e.target.value="";});
 function backupAll(){
-  saveAll();const data=JSON.stringify(readStore());
-  const blob=new Blob([data],{type:"application/json"});const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");a.href=url;a.download="fan_layout_backup_"+new Date().toISOString().slice(0,10)+".json";
-  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+  saveAll();const store=readStore();
+  collectPhotos(allFansInStore(store)).then(photos=>{
+    const data=JSON.stringify(Object.assign({},store,{photos:photos}));
+    const blob=new Blob([data],{type:"application/json"});const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="fan_layout_backup_"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+  });
 }
 document.getElementById("restoreInput").addEventListener("change",e=>{
   const file=e.target.files[0];if(!file)return;const fr=new FileReader();
   fr.onload=()=>{try{const incoming=JSON.parse(fr.result);if(!incoming.jobs)throw 0;
     const cur=readStore();const merged={current:cur.current,jobs:Object.assign({},cur.jobs,incoming.jobs)};
     writeStore(merged);
-    uiAlert("Restored "+Object.keys(incoming.jobs).length+" job(s). Open one from Jobs.");
+    const done=()=>uiAlert("Restored "+Object.keys(incoming.jobs).length+" job(s). Open one from Jobs.");
+    if(incoming.photos)writePhotos(incoming.photos).then(done);else done();
   }catch(err){uiAlert("That file isn't a valid backup.");}e.target.value="";};
   fr.readAsText(file);
 });
 
 /* ---------- boot ---------- */
+/* ---------- per-fan photos ---------- */
+const PHOTO_LABELS=["Location","Mounting","Power","Issue","Other"];
+const MAX_PHOTOS=8;
+let _idb=null;
+function idb(){return new Promise((res,rej)=>{if(_idb)return res(_idb);
+  let r;try{r=indexedDB.open("fanlayout_photos",1);}catch(e){return rej(e);}
+  r.onupgradeneeded=()=>{r.result.createObjectStore("photos");};
+  r.onsuccess=()=>{_idb=r.result;res(_idb);};r.onerror=()=>rej(r.error);});}
+function idbPut(id,val){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction("photos","readwrite");t.objectStore("photos").put(val,id);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);}));}
+function idbGet(id){return idb().then(db=>new Promise((res,rej)=>{const t=db.transaction("photos","readonly");const q=t.objectStore("photos").get(id);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);}));}
+function idbDel(id){return idb().then(db=>new Promise(res=>{const t=db.transaction("photos","readwrite");t.objectStore("photos").delete(id);t.oncomplete=()=>res();t.onerror=()=>res();})).catch(()=>{});}
+function shrinkImage(file,maxPx,q){return new Promise((res,rej)=>{const img=new Image();const url=URL.createObjectURL(file);
+  img.onload=()=>{URL.revokeObjectURL(url);let w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+    const sc=Math.min(1,maxPx/Math.max(w,h));w=Math.max(1,Math.round(w*sc));h=Math.max(1,Math.round(h*sc));
+    const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);
+    try{res(cv.toDataURL("image/jpeg",q));}catch(e){rej(e);}};
+  img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error("bad image"));};img.src=url;});}
+let photoFanId=null;
+function addPhotoToFan(f,file){
+  if(!f.photos)f.photos=[];
+  if(f.photos.length>=MAX_PHOTOS){uiAlert("Up to "+MAX_PHOTOS+" photos per fan.");return;}
+  shrinkImage(file,1280,0.7).then(dataUrl=>{
+    const id="ph_"+uid()+Date.now().toString(36);
+    return idbPut(id,dataUrl).then(()=>{pushHistory();f.photos.push({id:id,label:PHOTO_LABELS[0],cap:""});renderFanPhotos(f);render();scheduleSave();});
+  }).catch(()=>uiAlert("Couldn't add that image."));
+}
+function renderFanPhotos(f){
+  const strip=document.getElementById("fanPhotos");if(!strip)return;strip.innerHTML="";
+  (f.photos||[]).forEach((ph,i)=>{
+    const t=document.createElement("div");t.className="pthumb";t.textContent="…";
+    idbGet(ph.id).then(d=>{if(d){t.textContent="";t.style.backgroundImage="url("+d+")";}else{t.textContent="?";}}).catch(()=>{t.textContent="?";});
+    t.onclick=()=>openPhotoViewer(f,i);
+    strip.appendChild(t);
+  });
+  if((f.photos||[]).length<MAX_PHOTOS){
+    const add=document.createElement("div");add.className="pthumb padd";add.textContent="\uFF0B";
+    add.onclick=()=>{photoFanId=f.id;const inp=document.getElementById("fanPhotoInput");inp.value="";inp.click();};
+    strip.appendChild(add);
+  }
+}
+let viewerState=null;
+function openPhotoViewer(f,idx){viewerState={fan:f,idx:idx};showPhotoAt();document.getElementById("photoViewer").classList.add("show");}
+function showPhotoAt(){
+  if(!viewerState)return;const fan=viewerState.fan,idx=viewerState.idx,ph=(fan.photos||[])[idx];
+  if(!ph){closePhotoViewer();return;}
+  const img=document.getElementById("pvImg");img.removeAttribute("src");
+  idbGet(ph.id).then(d=>{if(d)img.src=d;});
+  document.getElementById("pvCount").textContent=(idx+1)+" / "+fan.photos.length;
+  const seg=document.getElementById("pvLabel");seg.innerHTML="";
+  PHOTO_LABELS.forEach(L=>{const b=document.createElement("button");b.textContent=L;if((ph.label||"")===L)b.classList.add("on");
+    b.onclick=()=>{ph.label=L;[...seg.children].forEach(c=>c.classList.remove("on"));b.classList.add("on");scheduleSave();};seg.appendChild(b);});
+  const cap=document.getElementById("pvCap");cap.value=ph.cap||"";cap.oninput=()=>{ph.cap=cap.value;scheduleSave();};
+}
+function pvNav(d){if(!viewerState)return;const n=viewerState.fan.photos.length;if(!n)return;viewerState.idx=(viewerState.idx+d+n)%n;showPhotoAt();}
+function closePhotoViewer(){document.getElementById("photoViewer").classList.remove("show");viewerState=null;}
+function deleteCurrentPhoto(){if(!viewerState)return;const fan=viewerState.fan,idx=viewerState.idx,ph=fan.photos[idx];
+  uiConfirm("Delete this photo?",()=>{pushHistory();idbDel(ph.id);fan.photos.splice(idx,1);
+    renderFanPhotos(fan);render();scheduleSave();
+    if(!fan.photos.length)closePhotoViewer();else{viewerState.idx=Math.min(idx,fan.photos.length-1);showPhotoAt();}},"Delete");}
+document.getElementById("fanPhotoInput").addEventListener("change",e=>{const file=e.target.files&&e.target.files[0];if(!file)return;const f=S.fans.find(x=>x.id===photoFanId);if(f)addPhotoToFan(f,file);});
+document.getElementById("pvClose").addEventListener("click",closePhotoViewer);
+document.getElementById("pvPrev").addEventListener("click",()=>pvNav(-1));
+document.getElementById("pvNext").addEventListener("click",()=>pvNav(1));
+document.getElementById("pvDel").addEventListener("click",deleteCurrentPhoto);
 function boot(){
   resize();
   const h=location.hash||"";
