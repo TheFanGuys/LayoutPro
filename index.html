@@ -114,6 +114,17 @@ body.shared #jobTap{pointer-events:none;}
   background:var(--panel); border-top-left-radius:20px; border-top-right-radius:20px; border-top:1px solid var(--line);
   padding:8px 14px calc(env(safe-area-inset-bottom) + 16px); max-height:88vh; overflow:auto;}
 .sheet.show{transform:translateY(0);}
+/* Help & tour live guide card (pinned top, sits above the real sheets) */
+.wizcard{position:fixed; left:10px; right:10px; top:calc(10px + env(safe-area-inset-top)); z-index:40;
+  background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  padding:14px; box-shadow:0 14px 36px rgba(0,0,0,.5);
+  transform:translateY(-180%); transition:transform .24s ease;}
+.wizcard.show{transform:translateY(0);}
+.wizcard h3{margin:0; font-size:18px;}
+.wizhead{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+.wizx{background:transparent; border:0; color:var(--muted); font-size:18px; line-height:1; padding:4px 6px;}
+.wizfoot{display:flex; align-items:center; justify-content:space-between; margin-top:10px;}
+.wizskip{background:transparent; border:0; color:var(--muted); font-size:13px; text-decoration:underline; padding:4px 2px;}
 .grab{width:40px; height:4px; border-radius:2px; background:var(--line); margin:6px auto 12px;}
 .sheet h3{margin:2px 0 12px; font-size:18px;}
 .field{margin-bottom:14px;}
@@ -289,13 +300,32 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <button class="btn" id="mPhoto" style="display:none">Adjust photo</button>
   <div class="mhead">All jobs (backup)</div>
   <div class="row"><button class="btn" id="mBackup">Back up all</button><button class="btn" id="mRestore">Restore</button></div>
+  <div class="mhead">Help</div>
+  <div class="field"><button class="btn" id="mHelp">Help &amp; tour</button></div>
   <div class="legend">
     <span><span class="ring" style="border-color:var(--good)"></span>Has FA</span>
     <span><span class="ring" style="border-color:var(--bad)"></span>Needs FA</span>
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21o · Wires rotate with plan</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21r · Wires avoid fans + tour</p>
+</div>
+
+<!-- Help & tour wizard (live guide, pinned top) -->
+<div class="wizcard" id="wizardSheet">
+  <div class="wizhead">
+    <h3 id="wizTitle">Welcome</h3>
+    <button class="wizx" id="wizClose" aria-label="Close tour">&#10005;</button>
+  </div>
+  <p class="hint" id="wizBody" style="line-height:1.5;font-size:14px;color:var(--text);margin:6px 0 12px;"></p>
+  <div class="row">
+    <button class="btn" id="wizBack">Back</button>
+    <button class="btn primary" id="wizNext">Next</button>
+  </div>
+  <div class="wizfoot">
+    <button class="wizskip" id="wizSkip">Skip tour</button>
+    <span class="hint" id="wizStep" style="margin:0;opacity:.7;"></span>
+  </div>
 </div>
 
 <!-- Layers sheet -->
@@ -683,6 +713,9 @@ function barrierRects(){
   const out=[];
   S.racking.forEach(r=>{if(r.barrier!==false)out.push(rectBBox(r));});
   S.rooms.forEach(r=>{if(r.barrier)out.push(rectBBox(r));});
+  const fr=(FAN_R+3)/(view.scale||1);           // fan-icon footprint in world units (matches the drawn icon)
+  S.fans.forEach(f=>{const p=fanPos(f);out.push({x0:p[0]-fr,y0:p[1]-fr,x1:p[0]+fr,y1:p[1]+fr});});
+  S.devices.forEach(d=>{out.push({x0:d.x-fr,y0:d.y-fr,x1:d.x+fr,y1:d.y+fr});});
   _barrierCache=out;return out;
 }
 function segCrossesRect(ax,ay,bx,by,R){
@@ -1720,6 +1753,61 @@ function closeSheet(n){document.getElementById(n+"Scrim").classList.remove("show
 function showBanner(t){const b=document.getElementById("banner");b.textContent=t;b.style.display="block";}
 function hideBanner(){document.getElementById("banner").style.display="none";}
 
+/* ---------- Help & tour wizard (live guide) ---------- */
+const WIZ=[
+  {t:"Welcome to Fan Layout", b:"This quick tour opens each menu for you as we go — just tap Next and watch the screen. Everything you do saves automatically under the job you're in."},
+  {t:"Start a job", open:"jobs", b:"Here's the Jobs sheet. Tap New job to start one. You begin by drawing the building; when you Save & exit, the outside walls lock so you don't drag them by accident."},
+  {t:"Drop fans", open:"add", b:"This is the Add menu. Tap Fan, pick the brand, then tap the floor to drop fans. Tap Move when you're done. The colored ring shows the fan's FA status."},
+  {t:"Controllers & keypads", open:"add", b:"Still in Add — under Power & control, drop a controller or keypad, then tap the fan it connects to. It draws the comm line for you."},
+  {t:"Run your wire", open:"add", b:"Under Wiring, tap FA wire or Comm wire, then tap one fan and the next. Wires turn in clean right angles and go around offices, racking, and conveyors on their own."},
+  {t:"Tune a wire", b:"Out on the plan, tap a wire to select it. Add bend, then drag the handle to follow an aisle. Remove bends to undo. To let wire cross a single-line conveyor, tap that box and turn its Barrier off."},
+  {t:"Mark your areas", open:"add", b:"Under Structure, add an Area box, then Name it or set Fill / office. Offices, racking, and conveyors block wires so your runs stay realistic."},
+  {t:"Relocate a fan", b:"On the plan, tap a fan, then Relocate, then tap the new spot. The fan moves there and leaves a dashed circle where it used to be."},
+  {t:"Finish & share", open:"menu", b:"This is the menu. Use Layers for what shows and Dark/Light, Rotate plan to line it up, then Share an image or link, make a PDF, or back up. Reopen this tour anytime here under Help."}
+];
+let wizI=0, wizOpenSheet=null;
+function markWizSeen(){try{localStorage.setItem("lp_wizard_seen","1");}catch(e){}}
+function wizResetSheet(name){ const sh=name&&document.getElementById(name+"Sheet"); if(sh){sh.style.maxHeight="";} }
+function wizFitSheet(){
+  if(!wizOpenSheet) return;
+  const card=document.getElementById("wizardSheet");
+  const sh=document.getElementById(wizOpenSheet+"Sheet");
+  if(!card||!sh) return;
+  const cardBottom=card.getBoundingClientRect().bottom;     // bottom edge of the tip card
+  const gap=14;
+  const avail=Math.max(180, window.innerHeight - cardBottom - gap);
+  sh.style.maxHeight=avail+"px";   // never rise into the card's zone
+  sh.scrollTop=0;                  // show the row the tip is pointing at
+}
+function wizSyncSheet(){
+  const want=WIZ[wizI].open||null;
+  if(wizOpenSheet && wizOpenSheet!==want){ try{closeSheet(wizOpenSheet);}catch(e){} wizResetSheet(wizOpenSheet); wizOpenSheet=null; }
+  if(want && wizOpenSheet!==want){ try{openSheet(want); wizOpenSheet=want;}catch(e){} }
+  if(wizOpenSheet){ requestAnimationFrame(wizFitSheet); }
+}
+function renderWiz(){
+  const s=WIZ[wizI];
+  document.getElementById("wizTitle").textContent=s.t;
+  document.getElementById("wizBody").textContent=s.b;
+  document.getElementById("wizStep").textContent=(wizI+1)+" / "+WIZ.length;
+  document.getElementById("wizBack").style.visibility=wizI===0?"hidden":"visible";
+  document.getElementById("wizNext").textContent=wizI===WIZ.length-1?"Done":"Next";
+  wizSyncSheet();
+}
+function openWizard(){wizI=0;document.getElementById("wizardSheet").classList.add("show");renderWiz();}
+function closeWizard(){
+  document.getElementById("wizardSheet").classList.remove("show");
+  if(wizOpenSheet){ try{closeSheet(wizOpenSheet);}catch(e){} wizResetSheet(wizOpenSheet); wizOpenSheet=null; }
+  markWizSeen();
+}
+document.getElementById("wizNext").addEventListener("click",()=>{ if(wizI>=WIZ.length-1){closeWizard();} else {wizI++;renderWiz();} });
+document.getElementById("wizBack").addEventListener("click",()=>{ if(wizI>0){wizI--;renderWiz();} });
+document.getElementById("wizSkip").addEventListener("click",closeWizard);
+document.getElementById("wizClose").addEventListener("click",closeWizard);
+document.getElementById("mHelp").addEventListener("click",()=>{closeSheet("menu");openWizard();});
+addEventListener("resize",()=>{ if(document.getElementById("wizardSheet").classList.contains("show")) wizFitSheet(); });
+
+
 /* ---------- scope ---------- */
 document.getElementById("scopeHead").addEventListener("click",()=>document.getElementById("scope").classList.toggle("closed"));
 function wireEstimate(){
@@ -2450,6 +2538,7 @@ function boot(){
   if(st.current&&st.jobs[st.current])loadSnap(st.jobs[st.current]);
   else{view={x:innerWidth/2,y:innerHeight/2,scale:1};render();updateScope();}
   refreshFanSwatch();refreshCtx();
+  try{ if(!localStorage.getItem("lp_wizard_seen")) openWizard(); }catch(e){}
 }
 boot();
 })();
