@@ -308,7 +308,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
     <span><span class="ring" style="border-color:var(--warn)"></span>Maybe FA</span>
     <span>Dashed = relocate</span>
   </div>
-  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21t · FA/comm taps</p>
+  <p class="hint" style="margin-top:14px;text-align:center;opacity:.7;">Build 2026.06.21w · Hops in SVG/PDF export too</p>
 </div>
 
 <!-- Help & tour wizard (live guide, pinned top) -->
@@ -338,6 +338,7 @@ textarea.inp{height:84px; padding:10px 12px; resize:vertical; line-height:1.35; 
   <div class="field"><button class="btn" id="mDims">Hide dimensions</button></div>
   <div class="field"><button class="btn" id="mBayGrid">Hide column grid</button></div>
   <div class="field"><button class="btn" id="mColOff">Column offsets: off</button></div>
+  <div class="field"><button class="btn" id="mTips">Tips: on</button></div>
   <div class="field"><label>Appearance</label><div class="seg" id="mTheme"></div></div>
   <button class="btn primary" id="layersDone">Done</button>
 </div>
@@ -739,10 +740,59 @@ function barrierRects(){
   const out=[];
   S.racking.forEach(r=>{if(r.barrier!==false)out.push(rectBBox(r));});
   S.rooms.forEach(r=>{if(r.barrier)out.push(rectBBox(r));});
-  const fr=FAN_KEEP;                              // fixed real-world keep-out so the route never depends on zoom
-  S.fans.forEach(f=>{const p=fanPos(f);out.push({x0:p[0]-fr,y0:p[1]-fr,x1:p[0]+fr,y1:p[1]+fr});});
-  S.devices.forEach(d=>{out.push({x0:d.x-fr,y0:d.y-fr,x1:d.x+fr,y1:d.y+fr});});
-  _barrierCache=out;return out;
+  _barrierCache=out;return out;   // fans are NOT routing obstacles — passing fans are shown with a hop arc instead (see strokeRouteHops)
+}
+// Draw a wire polyline but arc ("hop") around any fan it passes that it isn't connected to.
+// centers are SCREEN points, Rh is the hop radius in screen px — so the hop is always visible at any zoom.
+function strokeRouteHops(c, pts, centers, Rh){
+  const path=routeHopPath(pts,centers,Rh);
+  c.beginPath(); c.moveTo(path[0][0],path[0][1]);
+  for(let i=1;i<path.length;i++)c.lineTo(path[i][0],path[i][1]);
+  c.stroke();
+}
+// Build a polyline (point list) that follows pts but arcs around each center it passes within Rh.
+// Coord-space agnostic: pass screen pts+Rh for canvas, world pts+Rh for SVG/PDF.
+function routeHopPath(pts, centers, Rh){
+  const out=[[pts[0][0],pts[0][1]]];
+  for(let i=0;i<pts.length-1;i++){
+    const A=pts[i], B=pts[i+1];
+    const dx=B[0]-A[0], dy=B[1]-A[1], L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+    const cr=[];
+    for(const C of centers){
+      const t=(C[0]-A[0])*ux+(C[1]-A[1])*uy;
+      const px=A[0]+ux*t, py=A[1]+uy*t, d=Math.hypot(C[0]-px,C[1]-py);
+      if(d<Rh-0.5){const half=Math.sqrt(Rh*Rh-d*d), t0=t-half, t1=t+half; if(t1>0.5&&t0<L-0.5)cr.push({t0,t1,C});}
+    }
+    cr.sort((a,b)=>a.t0-b.t0);
+    let cur=0;
+    for(const x of cr){
+      if(x.t1<=cur)continue;
+      const et=Math.max(0,x.t0), xt=Math.min(L,x.t1);
+      const Ex=A[0]+ux*et,Ey=A[1]+uy*et, Xx=A[0]+ux*xt,Xy=A[1]+uy*xt;
+      out.push([Ex,Ey]);
+      pushArcPts(out,x.C,Rh,Ex,Ey,Xx,Xy,ux,uy);
+      cur=xt;
+    }
+    out.push([B[0],B[1]]);
+  }
+  return out;
+}
+function pushArcPts(out,C,Rh,Ex,Ey,Xx,Xy,ux,uy){
+  const aE=Math.atan2(Ey-C[1],Ex-C[0]), aX=Math.atan2(Xy-C[1],Xx-C[0]);
+  let mx=(Ex+Xx)/2-C[0], my=(Ey+Xy)/2-C[1];
+  if(Math.hypot(mx,my)<0.001){mx=-uy;my=ux;}              // through-center: bulge perpendicular to the wire
+  const aM=Math.atan2(my,mx);
+  let d1=aX-aE; while(d1<=-Math.PI)d1+=2*Math.PI; while(d1>Math.PI)d1-=2*Math.PI;
+  const near=a=>{let dd=a-aM; while(dd<=-Math.PI)dd+=2*Math.PI; while(dd>Math.PI)dd-=2*Math.PI; return Math.abs(dd);};
+  const span=(near(aE+d1/2)<Math.PI/2)?d1:(d1>0?d1-2*Math.PI:d1+2*Math.PI);
+  const N=14;
+  for(let k=1;k<=N;k++){const a=aE+span*k/N; out.push([C[0]+Rh*Math.cos(a),C[1]+Rh*Math.sin(a)]);}
+}
+// world-space hop centers (fans this wire is NOT connected to), for the vector exports
+function wireHopCenters(ln){
+  const conn=new Set(); if(ln.a.kind==="fan")conn.add(ln.a.id); if(ln.b.kind==="fan")conn.add(ln.b.id);
+  const ctr=[]; S.fans.forEach(f=>{if(conn.has(f.id))return;const fp=fanPos(f);ctr.push([fp[0],fp[1]]);});
+  return ctr;
 }
 function segCrossesRect(ax,ay,bx,by,R){
   if(Math.max(ax,bx)<R.x0||Math.min(ax,bx)>R.x1||Math.max(ay,by)<R.y0||Math.min(ay,by)>R.y1)return false;
@@ -1059,7 +1109,9 @@ function drawScene(c, tx, fanR, dpr, live){
     const sp=rt.map(pt=>{const q=P(pt[0],pt[1]);return [q[0]+off,q[1]+off];});
     c.strokeStyle=seld?"#FF7A1A":wr.color; c.lineWidth=(seld?4:2.8)*dpr; c.lineCap="round"; c.lineJoin="round";
     c.setLineDash(wr.dash.map(v=>v*dpr));
-    c.beginPath();c.moveTo(sp[0][0],sp[0][1]);for(let i=1;i<sp.length;i++)c.lineTo(sp[i][0],sp[i][1]);c.stroke();
+    const connFans=new Set(); if(ln.a.kind==="fan")connFans.add(ln.a.id); if(ln.b.kind==="fan")connFans.add(ln.b.id);
+    const hopC=[]; for(const f of S.fans){if(connFans.has(f.id))continue;const fp=fanPos(f);hopC.push(P(fp[0],fp[1]));}
+    strokeRouteHops(c, sp, hopC, fanR+9*dpr);
     c.setLineDash([]);
     if(seld&&ln.pts){c.fillStyle="#fff";c.strokeStyle="#FF7A1A";c.lineWidth=2*dpr;
       for(const pt of ln.pts){const[hx,hy]=P(pt[0],pt[1]);c.beginPath();c.rect(hx-5*dpr,hy-5*dpr,10*dpr,10*dpr);c.fill();c.stroke();}}
@@ -1794,7 +1846,17 @@ function buildSeg(id,opts,cur,cb){const el=document.getElementById(id);el.innerH
 function openSheet(n){document.getElementById(n+"Scrim").classList.add("show");document.getElementById(n+"Sheet").classList.add("show");}
 function closeSheet(n){document.getElementById(n+"Scrim").classList.remove("show");document.getElementById(n+"Sheet").classList.remove("show");}
 ["fan","jobs","menu","brand","add","building","addr","cgrid","rack","layers","shell"].forEach(n=>document.getElementById(n+"Scrim").addEventListener("click",()=>closeSheet(n)));
-function showBanner(t){const b=document.getElementById("banner");b.textContent=t;b.style.display="block";}
+let tipsOff=false; try{tipsOff=localStorage.getItem("lp_tips_off")==="1";}catch(e){}
+function refreshTipsBtn(){const t=document.getElementById("mTips");if(t)t.textContent=tipsOff?"Tips: off":"Tips: on";}
+function showBanner(t){
+  if(tipsOff)return;
+  const b=document.getElementById("banner");b.innerHTML="";
+  const msg=document.createElement("span");msg.textContent=t;b.appendChild(msg);
+  const x=document.createElement("span");x.textContent="✕ Hide tips";
+  x.style.cssText="margin-left:10px;padding-left:10px;border-left:1px solid rgba(35,18,0,.35);text-decoration:underline;cursor:pointer;white-space:nowrap;";
+  x.onclick=(e)=>{e.stopPropagation();tipsOff=true;try{localStorage.setItem("lp_tips_off","1");}catch(e){}refreshTipsBtn();hideBanner();};
+  b.appendChild(x);b.style.display="block";
+}
 function hideBanner(){document.getElementById("banner").style.display="none";}
 
 /* ---------- Help & tour wizard (live guide) ---------- */
@@ -2037,7 +2099,9 @@ function svgScene(){
   S.walls.forEach(w=>{s+=`<line x1="${n(w.x1)}" y1="${n(w.y1)}" x2="${n(w.x2)}" y2="${n(w.y2)}" stroke="${C.wall}" stroke-width="${n(lw*1.6)}" stroke-linecap="round"/>`;});
   if(showDims)S.walls.forEach(w=>{const len=Math.hypot(w.x2-w.x1,w.y2-w.y1);if(len<R*2)return;const mx=(w.x1+w.x2)/2,my=(w.y1+w.y2)/2;s+=`<text x="${n(mx)}" y="${n(my)}" fill="${C.dim}" font-size="${n(fs*0.85)}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${Math.round(len)}'</text>`;});
   S.columns.forEach(p=>{s+=`<circle cx="${n(p.x)}" cy="${n(p.y)}" r="${n(Math.max(0.8,R*0.12))}" fill="${C.col}"/>`;});
-  S.links.forEach(ln=>{const a=nodeCenter(ln.a),bb=nodeCenter(ln.b);if(!a||!bb)return;const wr=WIRE[ln.type]||WIRE.fa;const dash=ln.type==="comm"?` stroke-dasharray="${n(R*0.5)} ${n(R*0.3)}"`:"";s+=`<line x1="${n(a[0])}" y1="${n(a[1])}" x2="${n(bb[0])}" y2="${n(bb[1])}" stroke="${wr.color}" stroke-width="${n(lw*1.2)}"${dash}/>`;});
+  S.links.forEach(ln=>{const a=nodeCenter(ln.a),bb=nodeCenter(ln.b);if(!a||!bb)return;const wr=WIRE[ln.type]||WIRE.fa;const dash=ln.type==="comm"?` stroke-dasharray="${n(R*0.5)} ${n(R*0.3)}"`:"";
+    const hp=routeHopPath([a,bb],wireHopCenters(ln),R*1.5);let dd="";hp.forEach((p,i)=>{dd+=(i?"L":"M")+n(p[0])+" "+n(p[1])+" ";});
+    s+=`<path d="${dd}" fill="none" stroke="${wr.color}" stroke-width="${n(lw*1.2)}" stroke-linejoin="round" stroke-linecap="round"${dash}/>`;});
   if(showChains){const groups=chainGroups();Object.keys(groups).forEach(k=>{const arr=groups[k];if(arr.length<2)return;let d="";arr.forEach((f,i)=>{const px=(f.status==="Relocate"&&f.reloX!=null)?f.reloX:f.x,py=(f.status==="Relocate"&&f.reloY!=null)?f.reloY:f.y;d+=(i?"L":"M")+n(px)+" "+n(py)+" ";});s+=`<path d="${d}" fill="none" stroke="${C.chain}" stroke-width="${n(lw)}" stroke-dasharray="${n(R*0.4)} ${n(R*0.3)}"/>`;});}
   S.fans.forEach(f=>{if(f.status==="Relocate"&&f.reloX!=null){s+=`<line x1="${n(f.x)}" y1="${n(f.y)}" x2="${n(f.reloX)}" y2="${n(f.reloY)}" stroke="#FF7A1A" stroke-width="${n(lw*1.2)}"/><circle cx="${n(f.x)}" cy="${n(f.y)}" r="${n(R)}" fill="none" stroke="${brandColor(f.brand)}" stroke-width="${n(lw)}" stroke-dasharray="${n(R*0.4)} ${n(R*0.3)}"/>`;}});
   S.fans.forEach(f=>{const fc=FA_COLOR[f.fa]||"#888";const px=(f.status==="Relocate"&&f.reloX!=null)?f.reloX:f.x,py=(f.status==="Relocate"&&f.reloY!=null)?f.reloY:f.y;
@@ -2133,7 +2197,9 @@ function pdfVector(){
   if(showDims)S.walls.forEach(w=>{const len=Math.hypot(w.x2-w.x1,w.y2-w.y1);if(len*k<R*2)return;textC(Math.round(len)+"'",(w.x1+w.x2)/2,(w.y1+w.y2)/2,fs*0.85,hex(C.dim));});
   o+=hex(C.col)+' rg ';
   S.columns.forEach(p=>{circle(X(p.x),Y(p.y),Math.max(0.8,R*0.12));o+='f ';});
-  S.links.forEach(ln=>{const a=nodeCenter(ln.a),b=nodeCenter(ln.b);if(!a||!b)return;const wr=WIRE[ln.type]||WIRE.fa;o+=hex(wr.color)+' RG '+f3(lw*1.2)+' w '+(ln.type==='comm'?'['+f3(R*0.5)+' '+f3(R*0.3)+'] 0 d ':'[] 0 d ')+f3(X(a[0]))+' '+f3(Y(a[1]))+' m '+f3(X(b[0]))+' '+f3(Y(b[1]))+' l S ';});
+  S.links.forEach(ln=>{const a=nodeCenter(ln.a),b=nodeCenter(ln.b);if(!a||!b)return;const wr=WIRE[ln.type]||WIRE.fa;
+    o+=hex(wr.color)+' RG '+f3(lw*1.2)+' w '+(ln.type==='comm'?'['+f3(R*0.5)+' '+f3(R*0.3)+'] 0 d ':'[] 0 d ');
+    const hp=routeHopPath([a,b],wireHopCenters(ln),R*1.5);hp.forEach((p,i)=>{o+=f3(X(p[0]))+' '+f3(Y(p[1]))+' '+(i?'l':'m')+' ';});o+='S ';});
   o+='[] 0 d ';
   if(showChains){const groups=chainGroups();o+=hex(C.chain)+' RG '+f3(lw)+' w ['+f3(R*0.4)+' '+f3(R*0.3)+'] 0 d ';Object.keys(groups).forEach(kk=>{const arr=groups[kk];if(arr.length<2)return;arr.forEach((f,i)=>{const px=(f.status==='Relocate'&&f.reloX!=null)?f.reloX:f.x,py=(f.status==='Relocate'&&f.reloY!=null)?f.reloY:f.y;o+=f3(X(px))+' '+f3(Y(py))+(i?' l ':' m ');});o+='S ';});o+='[] 0 d ';}
   S.fans.forEach(f=>{if(f.status==='Relocate'&&f.reloX!=null){o+='1 0.478 0.102 RG '+f3(lw*1.2)+' w '+f3(X(f.x))+' '+f3(Y(f.y))+' m '+f3(X(f.reloX))+' '+f3(Y(f.reloY))+' l S '+hex(brandColor(f.brand))+' RG '+f3(lw)+' w ['+f3(R*0.4)+' '+f3(R*0.3)+'] 0 d ';circle(X(f.x),Y(f.y),R);o+='S [] 0 d ';}});
@@ -2174,6 +2240,9 @@ document.getElementById("mChains").addEventListener("click",()=>{showChains=!sho
   document.getElementById("mChains").textContent=showChains?"Hide chain links":"Show chain links";render();});
 document.getElementById("mDims").addEventListener("click",()=>{showDims=!showDims;
   document.getElementById("mDims").textContent=showDims?"Hide dimensions":"Show dimensions";render();});
+document.getElementById("mTips").addEventListener("click",()=>{tipsOff=!tipsOff;
+  try{tipsOff?localStorage.setItem("lp_tips_off","1"):localStorage.removeItem("lp_tips_off");}catch(e){}
+  refreshTipsBtn(); if(tipsOff)hideBanner();});
 document.getElementById("mBayGrid").addEventListener("click",()=>{showBayGrid=!showBayGrid;
   document.getElementById("mBayGrid").textContent=showBayGrid?"Hide column grid":"Show column grid";render();});
 document.getElementById("mTidy").addEventListener("click",()=>{closeSheet("menu");removeStrays();});
@@ -2566,6 +2635,7 @@ function boot(){
   resize();
   try{applyTheme(localStorage.getItem("lp_theme")||"dark");}catch(e){applyTheme("dark");}
   buildSeg("mTheme",["Dark","Light"],themeMode==="light"?"Light":"Dark",v=>applyTheme(v==="Light"?"light":"dark"));
+  refreshTipsBtn();
   const h=location.hash||"";
   if(h.indexOf("#v=")===0){
     try{
